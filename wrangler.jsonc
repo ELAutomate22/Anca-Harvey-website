@@ -1,0 +1,65 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "our-corner-dev",
+  "main": "worker/src/index.ts",
+  "compatibility_date": "2026-08-20",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "our-corner-db",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "preview_database_id": "our-corner-local",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "our-corner-private-media"
+    }
+  ],
+  "vars": {
+    "APP_ENV": "development",
+    "ALLOWED_ORIGIN": "http://localhost:5173"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "env": {
+    "production": {
+      "name": "our-corner",
+      "assets": {
+        "directory": "./dist",
+        "binding": "ASSETS",
+        "not_found_handling": "single-page-application",
+        "run_worker_first": ["/api/*"]
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "our-corner-db",
+          "database_id": "11111111-1111-1111-1111-111111111111",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "MEDIA",
+          "bucket_name": "our-corner-private-media"
+        }
+      ],
+      "vars": {
+        "APP_ENV": "production",
+        "ALLOWED_ORIGIN": "https://replace-with-your-private-domain.example"
+      }
+    }
+  }
+}

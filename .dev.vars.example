@@ -1,0 +1,4 @@
+# Runtime secrets are intentionally unnecessary for local sessions.
+# User credentials are read only by scripts/provision-users.mjs from its process environment.
+APP_ENV=development
+ALLOWED_ORIGIN=http://localhost:5173
