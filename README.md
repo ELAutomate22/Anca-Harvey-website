@@ -26,7 +26,7 @@ There is no public registration, setup endpoint, password-reset flow, Supabase, 
 ## Security model
 
 - Production users are provisioned from process environment values by `scripts/provision-users.mjs`; plaintext credentials are not stored.
-- Passwords use PBKDF2-HMAC-SHA-256 with a random 16-byte salt and 600,000 iterations.
+- Passwords use scrypt with a random 16-byte salt and OWASP's `N=2^15, r=8, p=3` profile.
 - Sessions use an unpredictable cookie token while D1 stores only its SHA-256 hash. The `__Host-our-corner-session` cookie is `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/`, and expires after 30 days.
 - Every private query derives the relationship from the authenticated session. Browser-supplied relationship IDs are not trusted.
 - Mutations validate the configured Origin, reject cross-site fetches, and validate Host in production. CORS is credentialed only for the configured origin.
@@ -75,7 +75,7 @@ Local Wrangler state is under `.wrangler/` and is ignored by source control. To 
 
 Migrations in `migrations/` are the complete reproducible schema. Do not create production tables manually in the dashboard.
 
-- `users`: two-account limit, emails, display names, PBKDF2 hashes, active state.
+- `users`: two-account limit, emails, display names, scrypt hashes, active state.
 - `relationships`: the sole partner membership record, title, start date, and IANA timezone.
 - `sessions`: hashed tokens, expiry, last-seen time, privacy-preserving request metadata hashes.
 - `login_attempts`: brute-force throttling state.
@@ -142,7 +142,7 @@ All protected frontend routes redirect unauthenticated users to the cinematic lo
    pnpm exec wrangler r2 bucket create our-corner-private-media
    ```
 
-4. Replace `https://replace-with-your-private-domain.example` in `wrangler.jsonc` with the final HTTPS origin that will serve the app. The hostname must match requests in production.
+4. Set `env.production.vars.ALLOWED_ORIGIN` in `wrangler.jsonc` to the final HTTPS frontend origin, and set `API_ORIGIN` to the deployed Worker origin. When Netlify serves the frontend, keep the external `/api/*` rewrite in `netlify.toml` pointed at that same Worker origin. This same-origin browser path is required for the secure session cookie.
 
 5. Apply the schema:
 
@@ -150,18 +150,10 @@ All protected frontend routes redirect unauthenticated users to the cinematic lo
    pnpm db:migrate:remote
    ```
 
-6. In the same terminal process, set the provisioning inputs shown below, then run `pnpm db:provision:remote`. Use two different strong passwords of at least 14 characters. Do not put real values in `.env`, `.dev.vars`, shell history, screenshots, tickets, or source control.
+6. Run the secure interactive production provisioner. It masks and confirms both passwords, requires at least 14 characters, and clears the temporary process variables after provisioning. Do not put real values in `.env`, `.dev.vars`, shell history, screenshots, tickets, or source control.
 
-   ```text
-   PARTNER_1_EMAIL
-   PARTNER_1_PASSWORD
-   PARTNER_1_NAME
-   PARTNER_2_EMAIL
-   PARTNER_2_PASSWORD
-   PARTNER_2_NAME
-   RELATIONSHIP_TITLE
-   RELATIONSHIP_START_DATE   (YYYY-MM-DD)
-   RELATIONSHIP_TIMEZONE     (optional; defaults to Europe/London)
+   ```bash
+   pnpm db:provision:remote:prompt
    ```
 
    The script writes only salted password hashes to D1, builds SQL in a permission-restricted temporary directory, removes it after Wrangler exits, and does not print the credentials.
@@ -177,7 +169,13 @@ All protected frontend routes redirect unauthenticated users to the cinematic lo
    pnpm deploy
    ```
 
-8. Visit `/api/health`, sign in with each account, upload a temporary image and video, verify seeking/private access, delete the test memory, sign out, and confirm the private route returns to `/login`.
+8. If Netlify hosts the frontend, deploy `dist` with `netlify.toml`, then make the Netlify project public at the platform layer. The application remains private because every route and API action uses the two-account login; leaving Netlify's separate account gate enabled would require each visitor to have a Netlify account.
+
+   ```bash
+   npx netlify deploy --prod --dir=dist
+   ```
+
+9. Visit `/api/health`, sign in with each account, upload a temporary image and video, verify seeking/private access, delete the test memory, sign out, and confirm the private route returns to `/login`.
 
 No runtime `SESSION_SECRET` is needed by the chosen server-side session design: session tokens are cryptographically random and only their hashes are stored. The provisioning values are one-time process environment inputs, not Worker bindings and never `VITE_*` variables. If a future phase adds a runtime secret, store it with `wrangler secret put`, not in the Vite environment.
 

@@ -3,9 +3,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
-import { webcrypto } from 'node:crypto'
+import { scryptSync, webcrypto } from 'node:crypto'
 
-const ITERATIONS = 600_000
+const SCRYPT_N = 32_768
+const SCRYPT_R = 8
+const SCRYPT_P = 3
+const SCRYPT_MAX_MEMORY = 64 * 1024 * 1024
 const args = new Set(process.argv.slice(2))
 const remote = args.has('--remote')
 const local = args.has('--local')
@@ -56,19 +59,13 @@ if (!/^\d{4}-\d{2}-\d{2}$/.test(values.startDate)) {
 const bytesToBase64Url = (bytes) => Buffer.from(bytes).toString('base64url')
 const hashPassword = async (password) => {
   const salt = webcrypto.getRandomValues(new Uint8Array(16))
-  const material = await webcrypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(password),
-    'PBKDF2',
-    false,
-    ['deriveBits'],
-  )
-  const hash = new Uint8Array(await webcrypto.subtle.deriveBits(
-    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: ITERATIONS },
-    material,
-    256,
-  ))
-  return `pbkdf2-sha256$${ITERATIONS}$${bytesToBase64Url(salt)}$${bytesToBase64Url(hash)}`
+  const hash = scryptSync(password, salt, 32, {
+    N: SCRYPT_N,
+    r: SCRYPT_R,
+    p: SCRYPT_P,
+    maxmem: SCRYPT_MAX_MEMORY,
+  })
+  return `scrypt$${SCRYPT_N}$${SCRYPT_R}$${SCRYPT_P}$${bytesToBase64Url(salt)}$${bytesToBase64Url(hash)}`
 }
 
 const sqlString = (value) => `'${String(value).replaceAll("'", "''")}'`

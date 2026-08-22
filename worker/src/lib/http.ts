@@ -123,8 +123,11 @@ export const assertMutationOrigin = (request: Request, env: Env): void => {
 
   if (env.APP_ENV === 'production') {
     const host = request.headers.get('host')
-    const allowedHost = new URL(env.ALLOWED_ORIGIN).host
-    if (host !== allowedHost) {
+    const allowedHosts = new Set([
+      new URL(env.ALLOWED_ORIGIN).host,
+      new URL(env.API_ORIGIN).host,
+    ])
+    if (!host || !allowedHosts.has(host)) {
       throw new ApiError(403, 'HOST_NOT_ALLOWED', 'This host is not allowed.')
     }
   }

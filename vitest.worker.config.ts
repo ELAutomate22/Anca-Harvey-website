@@ -12,6 +12,7 @@ export default defineConfig(async () => {
           bindings: {
             APP_ENV: 'test',
             ALLOWED_ORIGIN: 'https://our-corner.test',
+            API_ORIGIN: 'https://our-corner.test',
             TEST_MIGRATIONS: migrations,
           },
         },

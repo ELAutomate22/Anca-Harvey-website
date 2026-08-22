@@ -1,7 +1,8 @@
 import { env, exports } from 'cloudflare:workers'
+import { scryptSync } from 'node:crypto'
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { bytesToBase64Url, hashText } from '../src/lib/crypto'
-import { verifyPassword } from '../src/lib/password'
+import { SCRYPT_N, SCRYPT_P, SCRYPT_R, verifyPassword } from '../src/lib/password'
 import { hasValidFileSignature } from '../src/routes/memories'
 
 const ORIGIN = 'https://our-corner.test'
@@ -10,13 +11,13 @@ let passwordHash = ''
 
 const hashPasswordForTest = async (password: string): Promise<string> => {
   const salt = new Uint8Array(16).fill(7)
-  const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits'])
-  const hash = new Uint8Array(await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: 100_000 },
-    material,
-    256,
-  ))
-  return `pbkdf2-sha256$100000$${bytesToBase64Url(salt)}$${bytesToBase64Url(hash)}`
+  const hash = scryptSync(password, salt, 32, {
+    N: SCRYPT_N,
+    r: SCRYPT_R,
+    p: SCRYPT_P,
+    maxmem: 64 * 1024 * 1024,
+  })
+  return `scrypt$${SCRYPT_N}$${SCRYPT_R}$${SCRYPT_P}$${bytesToBase64Url(salt)}$${bytesToBase64Url(hash)}`
 }
 
 const request = (
@@ -70,7 +71,7 @@ beforeEach(async () => {
 })
 
 describe('password and media validation helpers', () => {
-  it('verifies a PBKDF2 password and rejects the wrong password', async () => {
+  it('verifies a scrypt password and rejects the wrong password', async () => {
     await expect(verifyPassword(TEST_PASSWORD, passwordHash)).resolves.toBe(true)
     await expect(verifyPassword('wrong password', passwordHash)).resolves.toBe(false)
     await expect(verifyPassword(TEST_PASSWORD, 'malformed')).resolves.toBe(false)

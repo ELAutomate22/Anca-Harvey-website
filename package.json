@@ -22,6 +22,7 @@
     "db:migrate:remote": "wrangler d1 migrations apply our-corner-db --remote --env production",
     "db:provision:local": "node scripts/provision-users.mjs --local --dev",
     "db:provision:remote": "node scripts/provision-users.mjs --remote --env production",
+    "db:provision:remote:prompt": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/provision-users-secure.ps1",
     "deploy": "pnpm build && wrangler deploy --env production"
   },
   "dependencies": {
