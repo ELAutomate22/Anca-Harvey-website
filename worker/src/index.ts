@@ -17,6 +17,35 @@ import {
   updateTimelineEntry,
 } from './routes/timeline'
 import {
+  addWatchlistMovie,
+  createMovieHistory,
+  deleteMovieHistory,
+  discoverMovies,
+  listMovieHistory,
+  listWatchlist,
+  movieDetails,
+  movieGenres,
+  movieStats,
+  movieVideos,
+  popularMovies,
+  removeWatchlistMovie,
+  searchMovies,
+  topRatedMovies,
+  updateMovieHistory,
+} from './routes/movies'
+import {
+  createGame,
+  createGameHistory,
+  deleteGame,
+  deleteGameHistory,
+  gameStats,
+  listGameHistory,
+  listGames,
+  updateGame,
+  updateGameHistory,
+} from './routes/games'
+import { createSong, deleteSong, listSongs, updateSong } from './routes/songs'
+import {
   ApiError,
   apiFailure,
   apiSuccess,
@@ -105,6 +134,93 @@ const handleApi = async (request: Request, env: Env): Promise<Response> => {
   if (timelineMatch?.[1]) {
     if (request.method === 'PATCH') return updateTimelineEntry(request, env, timelineMatch[1])
     if (request.method === 'DELETE') return deleteTimelineEntry(request, env, timelineMatch[1])
+    return methodNotAllowed()
+  }
+
+  if (pathname === '/api/movies/genres') {
+    return request.method === 'GET' ? movieGenres(request, env) : methodNotAllowed()
+  }
+  if (pathname === '/api/movies/popular') {
+    return request.method === 'GET' ? popularMovies(request, env) : methodNotAllowed()
+  }
+  if (pathname === '/api/movies/top-rated') {
+    return request.method === 'GET' ? topRatedMovies(request, env) : methodNotAllowed()
+  }
+  if (pathname === '/api/movies/search') {
+    return request.method === 'GET' ? searchMovies(request, env) : methodNotAllowed()
+  }
+  if (pathname === '/api/movies/discover') {
+    return request.method === 'GET' ? discoverMovies(request, env) : methodNotAllowed()
+  }
+  if (pathname === '/api/movies/watchlist') {
+    if (request.method === 'GET') return listWatchlist(request, env)
+    if (request.method === 'POST') return addWatchlistMovie(request, env)
+    return methodNotAllowed()
+  }
+  if (pathname === '/api/movies/history') {
+    if (request.method === 'GET') return listMovieHistory(request, env)
+    if (request.method === 'POST') return createMovieHistory(request, env)
+    return methodNotAllowed()
+  }
+  if (pathname === '/api/movies/stats') {
+    return request.method === 'GET' ? movieStats(request, env) : methodNotAllowed()
+  }
+  const movieVideoMatch = pathname.match(/^\/api\/movies\/(\d+)\/videos$/u)
+  if (movieVideoMatch?.[1]) {
+    return request.method === 'GET' ? movieVideos(request, env, movieVideoMatch[1]) : methodNotAllowed()
+  }
+  const watchlistMovieMatch = pathname.match(/^\/api\/movies\/watchlist\/(\d+)$/u)
+  if (watchlistMovieMatch?.[1]) {
+    return request.method === 'DELETE'
+      ? removeWatchlistMovie(request, env, watchlistMovieMatch[1])
+      : methodNotAllowed()
+  }
+  const movieHistoryMatch = pathname.match(/^\/api\/movies\/history\/([^/]+)$/u)
+  if (movieHistoryMatch?.[1]) {
+    if (request.method === 'PATCH') return updateMovieHistory(request, env, movieHistoryMatch[1])
+    if (request.method === 'DELETE') return deleteMovieHistory(request, env, movieHistoryMatch[1])
+    return methodNotAllowed()
+  }
+  const movieMatch = pathname.match(/^\/api\/movies\/(\d+)$/u)
+  if (movieMatch?.[1]) {
+    return request.method === 'GET' ? movieDetails(request, env, movieMatch[1]) : methodNotAllowed()
+  }
+
+  if (pathname === '/api/games') {
+    if (request.method === 'GET') return listGames(request, env)
+    if (request.method === 'POST') return createGame(request, env)
+    return methodNotAllowed()
+  }
+  if (pathname === '/api/games/history') {
+    if (request.method === 'GET') return listGameHistory(request, env)
+    if (request.method === 'POST') return createGameHistory(request, env)
+    return methodNotAllowed()
+  }
+  if (pathname === '/api/games/stats') {
+    return request.method === 'GET' ? gameStats(request, env) : methodNotAllowed()
+  }
+  const gameHistoryMatch = pathname.match(/^\/api\/games\/history\/([^/]+)$/u)
+  if (gameHistoryMatch?.[1]) {
+    if (request.method === 'PATCH') return updateGameHistory(request, env, gameHistoryMatch[1])
+    if (request.method === 'DELETE') return deleteGameHistory(request, env, gameHistoryMatch[1])
+    return methodNotAllowed()
+  }
+  const gameMatch = pathname.match(/^\/api\/games\/([^/]+)$/u)
+  if (gameMatch?.[1]) {
+    if (request.method === 'PATCH') return updateGame(request, env, gameMatch[1])
+    if (request.method === 'DELETE') return deleteGame(request, env, gameMatch[1])
+    return methodNotAllowed()
+  }
+
+  if (pathname === '/api/songs') {
+    if (request.method === 'GET') return listSongs(request, env)
+    if (request.method === 'POST') return createSong(request, env)
+    return methodNotAllowed()
+  }
+  const songMatch = pathname.match(/^\/api\/songs\/([^/]+)$/u)
+  if (songMatch?.[1]) {
+    if (request.method === 'PATCH') return updateSong(request, env, songMatch[1])
+    if (request.method === 'DELETE') return deleteSong(request, env, songMatch[1])
     return methodNotAllowed()
   }
 

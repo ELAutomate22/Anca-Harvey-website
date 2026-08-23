@@ -12,6 +12,7 @@ import { MemoryCard, type MemoryCardItem } from '@/components/media/MemoryCard'
 import { CinematicButton } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { PageHeader, PageTransition } from '@/components/ui/Page'
+import { useSearchParams } from 'react-router-dom'
 
 type Filter = 'All' | 'Photos' | 'Videos' | 'Favourites' | 'Trips' | 'Dates' | 'Funny' | 'Milestones'
 const filters: Filter[] = ['All', 'Photos', 'Videos', 'Favourites', 'Trips', 'Dates', 'Funny', 'Milestones']
@@ -70,6 +71,8 @@ const queryForFilter = (filter: string, cursor: string | null, sort: 'newest' | 
 }
 
 const MemoriesPage = () => {
+  const [searchParams] = useSearchParams()
+  const linkedMemoryId = searchParams.get('memory')
   const [filter, setFilter] = useState<string>('All')
   const [sort, setSort] = useState<'newest' | 'oldest'>('newest')
   const [memories, setMemories] = useState<ApiMemory[]>([])
@@ -107,6 +110,15 @@ const MemoriesPage = () => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (!linkedMemoryId) return
+    let active = true
+    apiRequest<ApiMemory>(`/api/memories/${encodeURIComponent(linkedMemoryId)}`)
+      .then((memory) => { if (active) setSelected(memory) })
+      .catch((caught: unknown) => { if (active) setError(caught instanceof Error ? caught.message : 'That associated memory could not be opened.') })
+    return () => { active = false }
+  }, [linkedMemoryId])
 
   const takeMeBack = () => {
     const random = memories[Math.floor(Math.random() * memories.length)]

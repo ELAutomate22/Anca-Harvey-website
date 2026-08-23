@@ -13,6 +13,7 @@ export default defineConfig(async () => {
             APP_ENV: 'test',
             ALLOWED_ORIGIN: 'https://our-corner.test',
             API_ORIGIN: 'https://our-corner.test',
+            TMDB_API_READ_TOKEN: 'test-only-tmdb-token',
             TEST_MIGRATIONS: migrations,
           },
         },

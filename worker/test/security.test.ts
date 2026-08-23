@@ -1,6 +1,6 @@
 import { env, exports } from 'cloudflare:workers'
 import { scryptSync } from 'node:crypto'
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { bytesToBase64Url, hashText } from '../src/lib/crypto'
 import { SCRYPT_N, SCRYPT_P, SCRYPT_R, verifyPassword } from '../src/lib/password'
 import { hasValidFileSignature } from '../src/routes/memories'
@@ -44,6 +44,10 @@ const login = async (email = 'one@example.test', password = TEST_PASSWORD) => {
 
 beforeAll(async () => {
   passwordHash = await hashPasswordForTest(TEST_PASSWORD)
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
 })
 
 beforeEach(async () => {
@@ -222,5 +226,174 @@ describe('relationship, memory, and private media authorization', () => {
 
     const listed = await request('/api/memories', {}, cookie)
     expect(await listed.text()).not.toContain(key)
+  })
+})
+
+describe('Phase 3 private relationship features', () => {
+  it('requires authentication before all new private data and TMDB routes', async () => {
+    for (const path of [
+      '/api/movies/popular',
+      '/api/movies/watchlist',
+      '/api/movies/history',
+      '/api/movies/stats',
+      '/api/games',
+      '/api/games/history',
+      '/api/games/stats',
+      '/api/songs',
+    ]) {
+      expect((await request(path)).status, path).toBe(401)
+    }
+  })
+
+  it('proxies a mocked TMDB response with fixed privacy defaults and a server-only token', async () => {
+    const { cookie } = await login()
+    const outbound: Array<{ url: string; authorization: string | null }> = []
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+      const requestUrl = input instanceof Request ? input.url : String(input)
+      const headers = new Headers(init?.headers)
+      outbound.push({ url: requestUrl, authorization: headers.get('authorization') })
+      return Response.json({
+        page: 1,
+        total_pages: 2,
+        total_results: 1,
+        results: [{
+          id: 603,
+          title: 'A Mocked Film',
+          overview: 'A test catalogue response.',
+          poster_path: '/poster.jpg',
+          backdrop_path: '/backdrop.jpg',
+          release_date: '2026-08-20',
+          genre_ids: [18],
+          vote_average: 7.5,
+          vote_count: 101,
+        }],
+      })
+    })
+
+    const response = await request('/api/movies/popular?page=1', {}, cookie)
+    const text = await response.text()
+    expect(response.status).toBe(200)
+    expect(text).toContain('A Mocked Film')
+    expect(text).not.toContain('test-only-tmdb-token')
+    expect(outbound).toHaveLength(1)
+    expect(outbound[0]?.authorization).toBe('Bearer test-only-tmdb-token')
+    const target = new URL(outbound[0]?.url ?? ORIGIN)
+    expect(target.origin).toBe('https://api.themoviedb.org')
+    expect(target.searchParams.get('language')).toBe('en-GB')
+    expect(target.searchParams.get('region')).toBe('GB')
+    expect(target.searchParams.get('include_adult')).toBe('false')
+  })
+
+  it('persists a unique watchlist, rewatches, normalized partner ratings, and real movie stats', async () => {
+    const { cookie } = await login()
+    const snapshot = {
+      tmdbMovieId: 603,
+      title: 'A Shared Film',
+      posterPath: '/poster.jpg',
+      releaseYear: 2026,
+    }
+    const firstWatchlist = await request('/api/movies/watchlist', {
+      method: 'POST',
+      body: JSON.stringify(snapshot),
+    }, cookie)
+    expect(firstWatchlist.status).toBe(201)
+    expect((await request('/api/movies/watchlist', {
+      method: 'POST',
+      body: JSON.stringify(snapshot),
+    }, cookie)).status).toBe(409)
+
+    for (const [watchedOn, note] of [['2026-08-20', 'First watch'], ['2026-08-22', 'A rewatch']]) {
+      const watched = await request('/api/movies/history', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...snapshot,
+          watchedOn,
+          note,
+          ratings: { 'partner-1': 4.5, 'partner-2': 5 },
+        }),
+      }, cookie)
+      expect(watched.status).toBe(201)
+    }
+
+    expect(await env.DB.prepare('SELECT COUNT(*) AS total FROM movie_history').first<number>('total')).toBe(2)
+    expect(await env.DB.prepare('SELECT COUNT(*) AS total FROM movie_history_ratings').first<number>('total')).toBe(4)
+    const stats = await request('/api/movies/stats', {}, cookie)
+    const payload = await stats.json<{ data: { totalWatches: number; uniqueMovies: number; rewatches: number } }>()
+    expect(payload.data).toMatchObject({ totalWatches: 2, uniqueMovies: 1, rewatches: 1 })
+    const watchlist = await request('/api/movies/watchlist', {}, cookie)
+    expect(await watchlist.json<{ data: Array<{ watched: boolean }> }>()).toMatchObject({ data: [{ watched: true }] })
+    expect((await request('/api/movies/watchlist/603', { method: 'DELETE' }, cookie)).status).toBe(200)
+  })
+
+  it('loads immutable starter games and supports custom games, outcomes, winners, and stats', async () => {
+    const { cookie } = await login()
+    const library = await request('/api/games', {}, cookie)
+    const libraryPayload = await library.json<{ data: Array<{ id: string; name: string; builtIn: boolean }> }>()
+    expect(libraryPayload.data.some((game) => game.name === 'UNO' && game.builtIn)).toBe(true)
+    expect((await request('/api/games/builtin-uno', {
+      method: 'PATCH',
+      body: JSON.stringify({ name: 'Changed' }),
+    }, cookie)).status).toBe(409)
+
+    const custom = await request('/api/games', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Our Quiz', category: 'Conversation', playerCount: '2 players', duration: '20 min', notes: 'Questions we wrote.' }),
+    }, cookie)
+    const customPayload = await custom.json<{ data: { id: string } }>()
+    expect(custom.status).toBe(201)
+
+    const partnerWin = await request('/api/games/history', {
+      method: 'POST',
+      body: JSON.stringify({ gameId: customPayload.data.id, playedOn: '2026-08-20', outcome: 'partner_win', winnerUserId: 'partner-2', rating: 4.5, note: 'Close game.' }),
+    }, cookie)
+    expect(partnerWin.status).toBe(201)
+    const cooperative = await request('/api/games/history', {
+      method: 'POST',
+      body: JSON.stringify({ gameId: 'builtin-overcooked', playedOn: '2026-08-21', outcome: 'cooperative_win', winnerUserId: null, rating: 5, note: '' }),
+    }, cookie)
+    expect(cooperative.status).toBe(201)
+
+    const stats = await request('/api/games/stats', {}, cookie)
+    const statsPayload = await stats.json<{ data: { gamesPlayed: number; cooperativeWins: number; partnerWins: Array<{ userId: string; wins: number }> } }>()
+    expect(statsPayload.data.gamesPlayed).toBe(2)
+    expect(statsPayload.data.cooperativeWins).toBe(1)
+    expect(statsPayload.data.partnerWins).toContainEqual({ userId: 'partner-2', wins: 1 })
+  })
+
+  it('keeps one Our Song, validates streaming hosts, and links relationship memories', async () => {
+    const { cookie } = await login()
+    const now = Date.now()
+    await env.DB.prepare(`
+      INSERT INTO memories (
+        id, relationship_id, created_by_user_id, title, caption, location, memory_date,
+        category, favorite, created_at, updated_at
+      ) VALUES ('song-memory', 'primary', 'partner-1', 'Our concert', '', '', '2026-08-01', 'Music', 0, ?, ?)
+    `).bind(now, now).run()
+
+    const first = await request('/api/songs', {
+      method: 'POST',
+      body: JSON.stringify({ title: 'First Song', artist: 'Test Artist', spotifyUrl: 'https://open.spotify.com/track/example', youtubeUrl: '', whyItMatters: 'The beginning.', addedOn: '2026-08-20', associatedMemoryId: 'song-memory', isOurSong: false }),
+    }, cookie)
+    const firstPayload = await first.json<{ data: { id: string; isOurSong: boolean; associatedMemoryTitle: string } }>()
+    expect(firstPayload.data.isOurSong).toBe(true)
+    expect(firstPayload.data.associatedMemoryTitle).toBe('Our concert')
+
+    const second = await request('/api/songs', {
+      method: 'POST',
+      body: JSON.stringify({ title: 'Second Song', artist: 'Another Artist', spotifyUrl: '', youtubeUrl: 'https://youtu.be/abc12345', whyItMatters: 'A later chapter.', addedOn: '2026-08-21', associatedMemoryId: null, isOurSong: false }),
+    }, cookie)
+    const secondPayload = await second.json<{ data: { id: string } }>()
+    expect((await request(`/api/songs/${secondPayload.data.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ isOurSong: true }),
+    }, cookie)).status).toBe(200)
+    expect(await env.DB.prepare("SELECT COUNT(*) AS total FROM songs WHERE is_our_song = 1").first<number>('total')).toBe(1)
+    expect(await env.DB.prepare('SELECT is_our_song FROM songs WHERE id = ?').bind(firstPayload.data.id).first<number>('is_our_song')).toBe(0)
+
+    const invalid = await request('/api/songs', {
+      method: 'POST',
+      body: JSON.stringify({ title: 'Unsafe', artist: 'Unknown', spotifyUrl: 'https://attacker.example/track', youtubeUrl: '', whyItMatters: '', addedOn: '2026-08-22', associatedMemoryId: null }),
+    }, cookie)
+    expect(invalid.status).toBe(400)
   })
 })

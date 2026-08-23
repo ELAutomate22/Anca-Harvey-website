@@ -1,6 +1,6 @@
 # Our Corner
 
-Our Corner is a private, two-person relationship archive. Phase 2 keeps the Phase 1 editorial React experience and adds a real Cloudflare backend for authentication, relationship data, Memories, user uploads, and custom Story entries.
+Our Corner is a private, two-person relationship archive. Phase 3 keeps the Phase 1 editorial React experience and Phase 2 security model, then adds live TMDB movie discovery plus shared Movie Night, Game Night, and Soundtrack data.
 
 ## Architecture
 
@@ -17,11 +17,13 @@ structured app data           authenticated user uploads only
 ```
 
 - The Worker entry point is `worker/src/index.ts`; routes and security helpers are split under `worker/src/`.
-- D1 holds exactly two users, one relationship, hashed sessions, login-attempt state, Memories metadata, media metadata, timeline entries, and idempotency records.
+- D1 holds exactly two users, one relationship, hashed sessions, login-attempt state, Memories metadata, media metadata, timeline entries, movie watchlist/history/ratings, games/history, songs, and idempotency records.
 - R2 holds only photos and videos uploaded by an authenticated partner. The bucket must remain private; browsers receive media through `/api/media/:mediaId` after server-side membership checks.
 - Developer-provided imagery, fonts, textures, and decorative media remain in `public/` or `src/assets/`. They are deployed as ordinary site assets, never copied to D1/R2, and are outside future relationship backups.
 
-There is no public registration, setup endpoint, password-reset flow, Supabase, Firebase, or browser-stored auth token. Movie Night, Game Night, Soundtrack, Date Ideas, Letters, Bucket List, and recap remain Phase 1/local features for now. TMDB is not connected.
+There is no public registration, setup endpoint, password-reset flow, Supabase, Firebase, or browser-stored auth token. Date Ideas, Letters, Bucket List, recap persistence, and export remain intentionally outside Phase 3.
+
+TMDB is called only by the authenticated Worker. The application Read Access Token is a Worker secret named `TMDB_API_READ_TOKEN`; it is never a `VITE_*` variable, frontend value, committed config value, or API response. TMDB catalogue data stays authoritative, while D1 stores only relationship-owned selections and small movie snapshots.
 
 ## Security model
 
@@ -45,6 +47,8 @@ pnpm db:migrate:local
 pnpm db:provision:local
 pnpm dev:full
 ```
+
+For live local movie discovery, create a gitignored `.dev.vars` file and add the `TMDB_API_READ_TOKEN` binding using your own TMDB application Read Access Token. The repository documents the binding name only and does not contain a token.
 
 Open `http://localhost:5173`. The deliberately fake local accounts are:
 
@@ -83,6 +87,10 @@ Migrations in `migrations/` are the complete reproducible schema. Do not create 
 - `memory_media`: R2 key (server-only), safe filename metadata, media type/MIME/size, alt text, order, optional dimensions/duration.
 - `timeline_entries`: custom chronological Story records.
 - `idempotency_keys`: duplicate-create protection with expiry.
+- `movie_watchlist`: one shared row per relationship/TMDB movie, with a compact display snapshot.
+- `movie_history` and `movie_history_ratings`: rewatch-safe diary entries with normalized half-star partner ratings.
+- `games` and `game_history`: immutable starter games, relationship-owned custom games, outcomes, winners, and ratings.
+- `songs`: relationship soundtrack metadata, approved HTTPS links, optional memory/upload associations, and a partial unique index for one Our Song.
 
 Foreign keys and focused indexes cover membership, session expiry, relationship/date pagination, favourites, media ordering, timeline ordering, and idempotency cleanup.
 
@@ -119,10 +127,26 @@ All API responses use `{ success: true, data }` or `{ success: false, error: { c
 | `GET/HEAD` | `/api/media/:mediaId` | authorized private R2 streaming/range delivery |
 | `GET/POST` | `/api/timeline` | list/create custom Story entries |
 | `PATCH/DELETE` | `/api/timeline/:id` | update/delete a custom Story entry |
+| `GET` | `/api/movies/genres`, `/popular`, `/top-rated`, `/search`, `/discover` | authenticated live TMDB catalogue |
+| `GET` | `/api/movies/:id`, `/api/movies/:id/videos` | details and lazily requested trailers |
+| `GET/POST` | `/api/movies/watchlist` | list/add shared watchlist entries |
+| `DELETE` | `/api/movies/watchlist/:tmdbId` | remove a watchlist entry |
+| `GET/POST` | `/api/movies/history` | list/create rewatch-safe diary entries |
+| `PATCH/DELETE` | `/api/movies/history/:id` | edit/delete a diary entry and ratings |
+| `GET` | `/api/movies/stats` | real watchlist/diary statistics |
+| `GET/POST` | `/api/games` | starter/custom game library |
+| `PATCH/DELETE` | `/api/games/:id` | edit/delete a custom game only |
+| `GET/POST` | `/api/games/history` | list/create game-night history |
+| `PATCH/DELETE` | `/api/games/history/:id` | edit/delete a game-night entry |
+| `GET` | `/api/games/stats` | real outcomes, wins, ratings, and most-played data |
+| `GET/POST` | `/api/songs` | list/create soundtrack entries |
+| `PATCH/DELETE` | `/api/songs/:id` | manage songs and atomically change Our Song |
 
 All protected frontend routes redirect unauthenticated users to the cinematic login. The route guard is only UX; the Worker remains authoritative.
 
 ## Production Cloudflare setup
+
+The production D1 database, private R2 bucket, two users, relationship, and origins already exist for the current site. Do not recreate or reprovision them for Phase 3; the creation steps below are retained only for a completely new environment. Phase 3 production needs the new migration, the TMDB secret, and a Worker/frontend deployment.
 
 1. Authenticate Wrangler:
 
@@ -150,7 +174,13 @@ All protected frontend routes redirect unauthenticated users to the cinematic lo
    pnpm db:migrate:remote
    ```
 
-6. Run the secure interactive production provisioner. It masks and confirms both passwords, requires at least 14 characters, and clears the temporary process variables after provisioning. Do not put real values in `.env`, `.dev.vars`, shell history, screenshots, tickets, or source control.
+6. Add the production TMDB secret interactively. Paste the application Read Access Token only into Wrangler's hidden prompt:
+
+   ```bash
+   pnpm exec wrangler secret put TMDB_API_READ_TOKEN --env production
+   ```
+
+7. Run the secure interactive production provisioner only when initially creating or deliberately rotating the two accounts. It masks and confirms both passwords, requires at least 14 characters, and clears the temporary process variables after provisioning. Do not put real values in `.env`, `.dev.vars`, shell history, screenshots, tickets, or source control.
 
    ```bash
    pnpm db:provision:remote:prompt
@@ -158,7 +188,7 @@ All protected frontend routes redirect unauthenticated users to the cinematic lo
 
    The script writes only salted password hashes to D1, builds SQL in a permission-restricted temporary directory, removes it after Wrangler exits, and does not print the credentials.
 
-7. Validate and deploy:
+8. Validate and deploy:
 
    ```bash
    pnpm typecheck
@@ -169,15 +199,15 @@ All protected frontend routes redirect unauthenticated users to the cinematic lo
    pnpm deploy
    ```
 
-8. If Netlify hosts the frontend, deploy `dist` with `netlify.toml`, then make the Netlify project public at the platform layer. The application remains private because every route and API action uses the two-account login; leaving Netlify's separate account gate enabled would require each visitor to have a Netlify account.
+9. If Netlify hosts the frontend, deploy `dist` with `netlify.toml`, then make the Netlify project public at the platform layer. The application remains private because every route and API action uses the two-account login; leaving Netlify's separate account gate enabled would require each visitor to have a Netlify account.
 
    ```bash
    npx netlify deploy --prod --dir=dist
    ```
 
-9. Visit `/api/health`, sign in with each account, upload a temporary image and video, verify seeking/private access, delete the test memory, sign out, and confirm the private route returns to `/login`.
+10. Visit `/api/health`, sign in with each account, verify movie discovery, add and remove a temporary watchlist/diary/game/song entry, upload a temporary image and video, verify seeking/private access, delete the test data, sign out, and confirm the private route returns to `/login`.
 
-No runtime `SESSION_SECRET` is needed by the chosen server-side session design: session tokens are cryptographically random and only their hashes are stored. The provisioning values are one-time process environment inputs, not Worker bindings and never `VITE_*` variables. If a future phase adds a runtime secret, store it with `wrangler secret put`, not in the Vite environment.
+No runtime `SESSION_SECRET` is needed by the chosen server-side session design: session tokens are cryptographically random and only their hashes are stored. The provisioning values are one-time process environment inputs, not Worker bindings and never `VITE_*` variables. `TMDB_API_READ_TOKEN` is the only Phase 3 runtime secret and belongs in Wrangler secrets (or local `.dev.vars`), never in Vite or source control.
 
 ## Troubleshooting
 
@@ -189,9 +219,13 @@ No runtime `SESSION_SECRET` is needed by the chosen server-side session design: 
 - upload `413`: keep images at or below 20 MB and videos at or below 80 MB.
 - video does not seek: verify the request passes through `/api/media/:mediaId` and the browser receives `206`, `Accept-Ranges`, and `Content-Range`.
 - production deployment uses a placeholder database ID/origin: replace both placeholders before running remote migrations or deploy.
+- `TMDB_NOT_CONFIGURED`: create local `.dev.vars` or set the production `TMDB_API_READ_TOKEN` Worker secret, then restart/redeploy the Worker.
+- TMDB catalogue errors: confirm the value is the application Read Access Token, not a browser key, and check the TMDB status page before changing application data.
 
 ## Frontend routes
 
-`/`, `/story`, `/memories`, and `/settings` now consume the Phase 2 API where relevant. `/movies`, `/games`, `/soundtrack`, `/activities`, `/letters`, `/bucket-list`, and `/recap` preserve their Phase 1 experiences and remain protected by login.
+`/movies`, `/games`, and `/soundtrack` now consume the Phase 3 API while preserving their Phase 1 visual language. All application pages remain protected by login, and every Phase 3 Worker route independently verifies the session and relationship membership.
+
+The Settings → About section contains the approved TMDB logo and required notice: “This product uses the TMDB API but is not endorsed or certified by TMDB.” No copyrighted music is stored; Soundtrack contains metadata, optional authenticated image associations, and allowlisted Spotify/YouTube links only.
 
 The backend relationship record is the runtime source of truth for profile names, title, start date, and timezone. `src/config/relationship.ts` remains the typed development/loading fallback so the frontend does not crash before local provisioning.
