@@ -113,7 +113,7 @@ export const AppShell = ({ children }: { children: ReactNode }) => {
 
       <footer className="border-t border-line px-5 py-12 text-center min-[1200px]:block">
         <p className="font-display text-2xl italic text-muted">A place for everything we keep becoming.</p>
-        <p className="mt-3 text-[0.68rem] font-bold uppercase tracking-[0.18em] text-muted">Private by design · Phase Two</p>
+        <p className="mt-3 text-[0.68rem] font-bold uppercase tracking-[0.18em] text-muted">Private by design · Phase Five</p>
       </footer>
 
       <nav aria-label="Mobile navigation" className="fixed inset-x-0 bottom-0 z-40 border-t border-line/80 bg-elevated/95 px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_35px_rgb(45_31_24/0.08)] backdrop-blur-xl min-[1200px]:hidden">

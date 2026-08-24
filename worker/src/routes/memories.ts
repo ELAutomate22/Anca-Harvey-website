@@ -16,7 +16,7 @@ const MIME_LIMITS = {
   'video/webm': { kind: 'video', extension: 'webm', maxBytes: MAX_VIDEO_BYTES },
 } as const
 
-type AllowedMime = keyof typeof MIME_LIMITS
+export type AllowedMime = keyof typeof MIME_LIMITS
 
 interface MemoryRow {
   id: string

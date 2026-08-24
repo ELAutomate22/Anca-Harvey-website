@@ -1,6 +1,6 @@
 # Our Corner
 
-Our Corner is a private, two-person relationship archive. Phase 3 keeps the Phase 1 editorial React experience and Phase 2 security model, then adds live TMDB movie discovery plus shared Movie Night, Game Night, and Soundtrack data.
+Our Corner is a private, two-person relationship archive. Phase 5 keeps the editorial React experience and established security model, with shared Memories, Story, Movie Night, Game Night, Soundtrack, activities, a bucket list, and a genuinely server-time-locked Letters to the Future archive.
 
 ## Architecture
 
@@ -17,11 +17,11 @@ structured app data           authenticated user uploads only
 ```
 
 - The Worker entry point is `worker/src/index.ts`; routes and security helpers are split under `worker/src/`.
-- D1 holds exactly two users, one relationship, hashed sessions, login-attempt state, Memories metadata, media metadata, timeline entries, movie watchlist/history/ratings, games/history, songs, and idempotency records.
-- R2 holds only photos and videos uploaded by an authenticated partner. The bucket must remain private; browsers receive media through `/api/media/:mediaId` after server-side membership checks.
+- D1 holds exactly two users, one relationship, hashed sessions, login-attempt state, Memories metadata, media metadata, timeline entries, movie watchlist/history/ratings, games/history, songs, activities/plans/history, bucket-list items, future letters/page metadata, and idempotency records.
+- R2 holds only photos, videos, and future-letter scans uploaded by an authenticated partner. The bucket must remain private; browsers receive media only through Worker routes after server-side authorization.
 - Developer-provided imagery, fonts, textures, and decorative media remain in `public/` or `src/assets/`. They are deployed as ordinary site assets, never copied to D1/R2, and are outside future relationship backups.
 
-There is no public registration, setup endpoint, password-reset flow, Supabase, Firebase, or browser-stored auth token. Date Ideas, Letters, Bucket List, recap persistence, and export remain intentionally outside Phase 3.
+There is no public registration, setup endpoint, password-reset flow, Supabase, Firebase, or browser-stored auth token. Anniversary Wrapped, full backup/export, and advanced Phase 6 visual effects remain intentionally deferred.
 
 TMDB is called only by the authenticated Worker. The application Read Access Token is a Worker secret named `TMDB_API_READ_TOKEN`; it is never a `VITE_*` variable, frontend value, committed config value, or API response. TMDB catalogue data stays authoritative, while D1 stores only relationship-owned selections and small movie snapshots.
 
@@ -36,6 +36,8 @@ TMDB is called only by the authenticated Worker. The application Read Access Tok
 - Queries use bound D1 statements. Text, dates, timezones, MIME types, sizes, and file signatures are validated server-side.
 - API errors use a stable `{ success: false, error: { code, message } }` shape and do not return SQL, R2, stack, hash, or cookie details.
 - CSP, clickjacking, MIME-sniffing, referrer, permissions, and private-cache headers are set by the Worker.
+- Future-letter readiness and opening are derived from Worker time and the sealed D1 `unlock_at`; browser time, request payloads, query parameters, and frontend state cannot authorize an open.
+- Future-letter drafts are creator-private. Sealed and ready responses use a safe metadata serializer that cannot include typed bodies, media IDs/URLs, Base64 content, or R2 keys. Private page delivery repeats the letter-state authorization on every request.
 
 ## Local setup
 
@@ -91,8 +93,15 @@ Migrations in `migrations/` are the complete reproducible schema. Do not create 
 - `movie_history` and `movie_history_ratings`: rewatch-safe diary entries with normalized half-star partner ratings.
 - `games` and `game_history`: immutable starter games, relationship-owned custom games, outcomes, winners, and ratings.
 - `songs`: relationship soundtrack metadata, approved HTTPS links, optional memory/upload associations, and a partial unique index for one Our Song.
+- `activities`, `activity_exclusions`, and `saved_activities`: 101 immutable starter ideas, relationship-owned custom ideas, per-relationship hiding, and shared saves.
+- `activity_suggestions`, `planned_activities`, and `activity_history`: repeat-aware random selections, editable/cancellable calendar plans, completion ratings/notes, attribution, and optional Memory links.
+- `bucket_list_items`: shared dreams, categories, priorities, target dates, Dreaming/Planning/Booked/Completed states, completion details, attribution, and optional Memory links.
+- `future_letters`: creator, real-profile recipient semantics, plain-text typed content, teaser, immutable sealed UTC unlock instant, opened timestamp, and first opener. The only stored states are `draft → sealed → opened`; `ready` is derived.
+- `future_letter_media`: server-only private R2 keys and image metadata for ordered handwritten pages or a typed-letter cover. A trigger backs up the application-level 12-page limit during concurrent uploads.
 
 Foreign keys and focused indexes cover membership, session expiry, relationship/date pagination, favourites, media ordering, timeline ordering, and idempotency cleanup.
+
+Phase 5 is additive: `0005_future_letters.sql` creates the letter/media schema and focused indexes, while `0006_future_letter_media_limits.sql` adds the concurrent-safe page-limit trigger. Previously applied migrations are unchanged.
 
 ## Memories and media
 
@@ -106,6 +115,20 @@ Memory list responses are cursor-paginated (20 by default, 50 maximum), default 
 The UI creates metadata idempotently, uploads each selected file separately, shows accessible per-file progress, preserves failed files for retry, and does not claim success before R2 confirms it. Media records expose `/api/media/:mediaId`, never the R2 object key. Delivery supports `HEAD`, ETag validation, private caching, and byte ranges for video seeking.
 
 Deleting a memory or attachment deletes its D1 metadata and attempts R2 cleanup. Unexpected cleanup failures are logged without cookies, passwords, tokens, or private text.
+
+## Letters to the Future
+
+`/letters` contains Create, Draft, Sealed, Ready, and Opened experiences on one responsive page. A creator can type plain text on accessible stationery or upload 1–12 JPEG, PNG, WebP, or AVIF handwritten pages (20 MB maximum per image). Drafts support debounced autosave plus an explicit save, per-page upload progress/retry, removal, accessible Up/Down ordering, real-profile recipients, quick anniversary/milestone dates, custom relationship-local date/time, and a final preview.
+
+The relationship's D1 `start_date` powers quick anniversary and six-month suggestions. The chosen local date/time is converted using the relationship's IANA timezone and stored as a UTC epoch. With no explicit time, the documented default is `00:00` in that timezone. Changing the relationship date later does not move an existing letter, and changing timezone after sealing never changes the stored instant; only its display changes.
+
+Sealing is a one-way Worker transaction. The Worker reloads the creator-owned draft, validates title/content or pages, recipient, and a future unlock instant, then stamps `sealed_at` with server time. All draft fields and media operations reject sealed letters. Deletion remains available only to the creator, requires the exact confirmation `DELETE`, cascades D1 metadata, and removes associated private R2 objects.
+
+The browser countdown is visual only and is anchored to the last Worker `serverNow`. At zero it refreshes metadata; it never reveals content. `POST /api/letters/:id/open` reloads D1, ignores browser-supplied time, compares the sealed timestamp with Worker time, enforces individual-recipient or both-of-us opening rules, and atomically records the first opener. Individual letters initially open only for the chosen recipient; both-of-us letters may be opened by either member. After the first valid open, both partners may revisit it from the shared archive. Repeated opens are idempotent.
+
+Locked list/detail responses do not place content in the browser response. Draft content is returned only to its creator, and opened content is fetched on demand rather than included in the grid. A guessed `/api/letters/:letterId/pages/:mediaId` request repeats authentication, relationship, draft ownership, and opened-state checks before reading R2; locked pages use `private, no-store` and cannot be obtained at the ready-but-unopened stage.
+
+Application-level encryption at rest is deliberately not introduced in Phase 5 because it would add key-loss and recovery risk. The mandatory protection boundary is private D1/R2 behind the authenticated Worker and its server-authoritative lock. Future backup/export code must use the safe letter serializer: draft or sealed content and page access are never exportable, while opened content may become eligible in a later phase.
 
 ## API
 
@@ -141,12 +164,33 @@ All API responses use `{ success: true, data }` or `{ success: false, error: { c
 | `GET` | `/api/games/stats` | real outcomes, wins, ratings, and most-played data |
 | `GET/POST` | `/api/songs` | list/create soundtrack entries |
 | `PATCH/DELETE` | `/api/songs/:id` | manage songs and atomically change Our Song |
+| `GET/POST` | `/api/activities` | filter the visible catalogue or create a custom idea |
+| `POST` | `/api/activities/random` | record and return a combined-filter, recent-repeat-aware suggestion |
+| `POST/DELETE` | `/api/activities/:id/save`, `/hide` | share saves or hide/restore catalogue ideas |
+| `PATCH/DELETE` | `/api/activities/:id` | edit/soft-delete a custom idea only |
+| `GET/POST` | `/api/planned-activities` | list or schedule shared dates |
+| `PATCH/DELETE` | `/api/planned-activities/:id` | edit or cancel an upcoming plan |
+| `POST` | `/api/planned-activities/:id/complete` | complete once, optionally creating one linked Memory |
+| `GET/PATCH/DELETE` | `/api/activity-history/:id?` | list, edit, or delete completion history |
+| `GET` | `/api/activities/stats` | completed, rating, saved, planned, and category totals |
+| `GET/POST` | `/api/bucket-list` | list/filter or add shared dreams |
+| `PATCH/DELETE` | `/api/bucket-list/:id` | edit, move, reopen, or delete a dream |
+| `POST` | `/api/bucket-list/:id/complete` | record completion and optionally create one linked Memory |
+| `GET` | `/api/bucket-list/random`, `/stats` | choose an unfinished dream and report real progress |
+| `GET/POST` | `/api/letters` | safe visible-envelope list and private draft creation |
+| `GET` | `/api/letters/summary`, `/quick-dates` | content-free metrics and relationship-derived date suggestions |
+| `GET/PATCH/DELETE` | `/api/letters/:id` | state-aware detail, creator-only draft edit, or strongly confirmed creator deletion |
+| `POST` | `/api/letters/:id/seal`, `/open` | immutable server seal or server-authorized intentional open |
+| `POST` | `/api/letters/:id/media` | creator-only draft page/cover upload to private R2 |
+| `PATCH` | `/api/letters/:id/media/order` | reorder the exact draft page set |
+| `DELETE` | `/api/letters/:id/media/:mediaId` | remove one creator-owned draft image |
+| `GET/HEAD` | `/api/letters/:id/pages/:mediaId` | state-authorized private R2 letter image delivery |
 
 All protected frontend routes redirect unauthenticated users to the cinematic login. The route guard is only UX; the Worker remains authoritative.
 
 ## Production Cloudflare setup
 
-The production D1 database, private R2 bucket, two users, relationship, and origins already exist for the current site. Do not recreate or reprovision them for Phase 3; the creation steps below are retained only for a completely new environment. Phase 3 production needs the new migration, the TMDB secret, and a Worker/frontend deployment.
+The production D1 database, private R2 bucket, two users, relationship, origins, and TMDB secret already exist for the current site. Do not recreate or reprovision them for Phase 5; the creation steps below are retained only for a completely new environment. A Phase 5 release applies migrations in order, deploys the Worker, builds the frontend, then deploys the static `dist` directory through its selected host.
 
 1. Authenticate Wrangler:
 
@@ -186,7 +230,7 @@ The production D1 database, private R2 bucket, two users, relationship, and orig
    pnpm db:provision:remote:prompt
    ```
 
-   The script writes only salted password hashes to D1, builds SQL in a permission-restricted temporary directory, removes it after Wrangler exits, and does not print the credentials.
+   The script writes only salted password hashes to D1, builds SQL in a permission-restricted temporary directory, removes it after Wrangler exits, and does not print the credentials. Phase updates must not rerun this step unless the two account owners intentionally rotate their credentials.
 
 8. Validate and deploy:
 
@@ -205,9 +249,11 @@ The production D1 database, private R2 bucket, two users, relationship, and orig
    npx netlify deploy --prod --dir=dist
    ```
 
-10. Visit `/api/health`, sign in with each account, verify movie discovery, add and remove a temporary watchlist/diary/game/song entry, upload a temporary image and video, verify seeking/private access, delete the test data, sign out, and confirm the private route returns to `/login`.
+10. Visit `/api/health`, sign in with each account, verify shared movie/game/song/activity/bucket data, then test a short-future individual letter and both-of-us letter. Inspect the locked network response, verify neither content nor media access is present, confirm the recipient rules after real backend unlock, remove temporary data, sign out, and confirm the private route returns to `/login`.
 
-No runtime `SESSION_SECRET` is needed by the chosen server-side session design: session tokens are cryptographically random and only their hashes are stored. The provisioning values are one-time process environment inputs, not Worker bindings and never `VITE_*` variables. `TMDB_API_READ_TOKEN` is the only Phase 3 runtime secret and belongs in Wrangler secrets (or local `.dev.vars`), never in Vite or source control.
+No runtime `SESSION_SECRET` is needed by the chosen server-side session design: session tokens are cryptographically random and only their hashes are stored. The provisioning values are one-time process environment inputs, not Worker bindings and never `VITE_*` variables. `TMDB_API_READ_TOKEN` remains the only catalogue runtime secret and belongs in Wrangler secrets (or local `.dev.vars`), never in Vite or source control.
+
+Phase 5 adds no environment variable or secret. Existing `DB` and private `MEDIA` bindings are reused. For the current production environment, the only required release commands are `pnpm db:migrate:remote`, the normal Worker deploy/build flow, and the chosen frontend-host deployment; do not rerun account provisioning.
 
 ## Troubleshooting
 
@@ -221,10 +267,15 @@ No runtime `SESSION_SECRET` is needed by the chosen server-side session design: 
 - production deployment uses a placeholder database ID/origin: replace both placeholders before running remote migrations or deploy.
 - `TMDB_NOT_CONFIGURED`: create local `.dev.vars` or set the production `TMDB_API_READ_TOKEN` Worker secret, then restart/redeploy the Worker.
 - TMDB catalogue errors: confirm the value is the application Read Access Token, not a browser key, and check the TMDB status page before changing application data.
+- `LETTER_LOCKED`: the Worker has not reached the sealed UTC unlock instant. Device-clock changes are intentionally ignored.
+- `INVALID_LOCAL_TIME`: choose a valid clock time in the relationship timezone; DST spring-forward gaps do not exist.
+- letter page upload `409`: keep handwritten letters to 12 pages, retry a failed page, or remove another page before adding it.
 
 ## Frontend routes
 
-`/movies`, `/games`, and `/soundtrack` now consume the Phase 3 API while preserving their Phase 1 visual language. All application pages remain protected by login, and every Phase 3 Worker route independently verifies the session and relationship membership.
+`/movies`, `/games`, `/soundtrack`, `/activities`, `/bucket-list`, and `/letters` consume authenticated APIs while preserving the editorial visual language. Activities provides Generator, Catalogue, Saved, Plans, and History views. Bucket List provides real statuses, filters, random picks, completion progress, and Memory-backed photos. Letters provides a typed/uploaded composer, server-sealed envelopes, recipient-aware Ready actions, and an opened archive. Home uses only content-free letter counts as a restrained integration and never exposes drafts. Every Worker route independently verifies the session and relationship membership.
+
+Activity and bucket completion uploads do not create a second media system. The completion transaction optionally creates one normal `memories` row and stores its ID on the history/item record; the existing `/api/memories/:id/media` route owns validation and private R2 uploads. Removing a history or bucket link never silently deletes that Memory.
 
 The Settings → About section contains the approved TMDB logo and required notice: “This product uses the TMDB API but is not endorsed or certified by TMDB.” No copyrighted music is stored; Soundtrack contains metadata, optional authenticated image associations, and allowlisted Spotify/YouTube links only.
 

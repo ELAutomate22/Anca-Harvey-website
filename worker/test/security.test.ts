@@ -55,6 +55,15 @@ beforeEach(async () => {
     env.DB.prepare('DELETE FROM idempotency_keys'),
     env.DB.prepare('DELETE FROM login_attempts'),
     env.DB.prepare('DELETE FROM sessions'),
+    env.DB.prepare('DELETE FROM future_letter_media'),
+    env.DB.prepare('DELETE FROM future_letters'),
+    env.DB.prepare('DELETE FROM bucket_list_items'),
+    env.DB.prepare('DELETE FROM activity_history'),
+    env.DB.prepare('DELETE FROM planned_activities'),
+    env.DB.prepare('DELETE FROM activity_suggestions'),
+    env.DB.prepare('DELETE FROM saved_activities'),
+    env.DB.prepare('DELETE FROM activity_exclusions'),
+    env.DB.prepare('DELETE FROM activities WHERE is_builtin = 0'),
     env.DB.prepare('DELETE FROM memory_media'),
     env.DB.prepare('DELETE FROM memories'),
     env.DB.prepare('DELETE FROM timeline_entries'),
@@ -395,5 +404,296 @@ describe('Phase 3 private relationship features', () => {
       body: JSON.stringify({ title: 'Unsafe', artist: 'Unknown', spotifyUrl: 'https://attacker.example/track', youtubeUrl: '', whyItMatters: '', addedOn: '2026-08-22', associatedMemoryId: null }),
     }, cookie)
     expect(invalid.status).toBe(400)
+  })
+})
+
+describe('Phase 4 shared plans and dreams', () => {
+  it('protects every Phase 4 collection and keeps the starter catalogue substantial', async () => {
+    for (const path of ['/api/activities', '/api/planned-activities', '/api/activity-history', '/api/activities/stats', '/api/bucket-list', '/api/bucket-list/stats', '/api/bucket-list/random']) {
+      expect((await request(path)).status, path).toBe(401)
+    }
+    const { cookie } = await login()
+    const response = await request('/api/activities', {}, cookie)
+    const payload = await response.json<{ data: Array<{ id: string; isBuiltin: boolean }> }>()
+    expect(response.status).toBe(200)
+    expect(payload.data.filter((activity) => activity.isBuiltin).length).toBeGreaterThanOrEqual(80)
+  })
+
+  it('persists custom, saved, and hidden activities and avoids the eight most recent suggestions', async () => {
+    const { cookie } = await login()
+    const custom = await request('/api/activities', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Our secret route', description: 'A relationship-only idea.', category: 'exploring', locationType: 'outdoor', budgetLevel: 'free', energyLevel: 'normal', durationCategory: 'one_to_three_hours', notes: '' }),
+    }, cookie)
+    const customPayload = await custom.json<{ data: { id: string; createdByUserId: string } }>()
+    expect(custom.status).toBe(201)
+    expect(customPayload.data.createdByUserId).toBe('partner-1')
+
+    expect((await request(`/api/activities/${customPayload.data.id}/save`, { method: 'POST' }, cookie)).status).toBe(200)
+    const saved = await request('/api/activities?saved=true', {}, cookie)
+    expect(await saved.json<{ data: Array<{ id: string }> }>()).toMatchObject({ data: [{ id: customPayload.data.id }] })
+    expect((await request(`/api/activities/${customPayload.data.id}/hide`, { method: 'POST' }, cookie)).status).toBe(200)
+    expect(await request(`/api/activities/${customPayload.data.id}`, { method: 'PATCH', body: JSON.stringify({ name: 'Still ours' }) }, cookie).then((response) => response.status)).toBe(200)
+    const hidden = await request('/api/activities?hidden=true', {}, cookie)
+    expect((await hidden.json<{ data: Array<{ id: string }> }>()).data.some((item) => item.id === customPayload.data.id)).toBe(true)
+
+    const selected = new Set<string>()
+    for (let index = 0; index < 9; index += 1) {
+      const random = await request('/api/activities/random', { method: 'POST', body: JSON.stringify({ locationType: 'home', energyLevel: 'lazy' }) }, cookie)
+      expect(random.status).toBe(200)
+      const result = await random.json<{ data: { activity: { id: string; locationType: string; energyLevel: string } } }>()
+      expect(['home', 'either']).toContain(result.data.activity.locationType)
+      expect(result.data.activity.energyLevel).toBe('lazy')
+      if (index < 8) expect(selected.has(result.data.activity.id)).toBe(false)
+      selected.add(result.data.activity.id)
+    }
+  })
+
+  it('shares plans between both partners and turns one completion with photos into one Memory', async () => {
+    const first = await login()
+    const catalogue = await request('/api/activities?category=romantic', {}, first.cookie)
+    const activity = (await catalogue.json<{ data: Array<{ id: string; name: string }> }>()).data[0]
+    expect(activity).toBeTruthy()
+    const plan = await request('/api/planned-activities', {
+      method: 'POST', body: JSON.stringify({ activityId: activity?.id, plannedDate: '2026-09-10', plannedTime: '19:30', note: 'Bring the camera.' }),
+    }, first.cookie)
+    const planPayload = await plan.json<{ data: { id: string; createdByUserId: string } }>()
+    expect(plan.status).toBe(201)
+    expect(planPayload.data.createdByUserId).toBe('partner-1')
+
+    const second = await login('two@example.test')
+    const sharedPlans = await request('/api/planned-activities?status=planned', {}, second.cookie)
+    expect((await sharedPlans.json<{ data: Array<{ id: string }> }>()).data).toContainEqual(expect.objectContaining({ id: planPayload.data.id }))
+    const completed = await request(`/api/planned-activities/${planPayload.data.id}/complete`, {
+      method: 'POST', body: JSON.stringify({ completedDate: '2026-09-10', rating: 4.5, notes: 'Perfect evening.', createMemory: true }),
+    }, second.cookie)
+    const completedPayload = await completed.json<{ data: { memoryId: string; history: { createdByUserId: string; rating: number } } }>()
+    expect(completed.status).toBe(201)
+    expect(completedPayload.data.history).toMatchObject({ createdByUserId: 'partner-2', rating: 4.5 })
+    expect(await env.DB.prepare('SELECT COUNT(*) AS total FROM memories WHERE id = ?').bind(completedPayload.data.memoryId).first<number>('total')).toBe(1)
+    expect(await env.DB.prepare('SELECT linked_memory_id FROM activity_history').first<string>('linked_memory_id')).toBe(completedPayload.data.memoryId)
+
+    const file = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0])], 'date.jpg', { type: 'image/jpeg' })
+    const body = new FormData(); body.set('file', file); body.set('altText', 'Our completed date')
+    const uploaded = await request(`/api/memories/${completedPayload.data.memoryId}/media`, { method: 'POST', body }, second.cookie)
+    expect(uploaded.status).toBe(201)
+    expect(await env.DB.prepare('SELECT COUNT(*) AS total FROM memory_media').first<number>('total')).toBe(1)
+  })
+
+  it('supports bucket-list statuses, random picks, completion statistics, and linked Memories', async () => {
+    const { cookie } = await login()
+    const createdIds: string[] = []
+    for (const [title, category] of [['See the northern lights', 'travel'], ['Cook one perfect meal', 'food']] as const) {
+      const created = await request('/api/bucket-list', { method: 'POST', body: JSON.stringify({ title, description: '', category, status: 'dreaming', priority: 'must_do' }) }, cookie)
+      expect(created.status).toBe(201)
+      createdIds.push((await created.json<{ data: { id: string } }>()).data.id)
+    }
+    expect((await request(`/api/bucket-list/${createdIds[0]}`, { method: 'PATCH', body: JSON.stringify({ status: 'booked', targetDate: '2027-01-15' }) }, cookie)).status).toBe(200)
+    const picked = await request('/api/bucket-list/random', {}, cookie)
+    expect(createdIds).toContain((await picked.json<{ data: { id: string } }>()).data.id)
+
+    const completed = await request(`/api/bucket-list/${createdIds[0]}/complete`, { method: 'POST', body: JSON.stringify({ completedAt: '2027-01-15', rating: 5, note: 'Even better than imagined.', createMemory: true }) }, cookie)
+    const completedPayload = await completed.json<{ data: { memoryId: string; item: { status: string; completionRating: number } } }>()
+    expect(completedPayload.data.item).toMatchObject({ status: 'completed', completionRating: 5 })
+    expect(await env.DB.prepare('SELECT COUNT(*) AS total FROM memories WHERE id = ?').bind(completedPayload.data.memoryId).first<number>('total')).toBe(1)
+    const stats = await request('/api/bucket-list/stats', {}, cookie)
+    expect(await stats.json<{ data: { totalCount: number; completedCount: number; progressPercent: number } }>()).toMatchObject({ data: { totalCount: 2, completedCount: 1, progressPercent: 50 } })
+  })
+})
+
+describe('Phase 5 server-authoritative future letters', () => {
+  const createDraft = async (cookie: string, letterType: 'typed' | 'uploaded' = 'typed') => {
+    const response = await request('/api/letters', {
+      method: 'POST', body: JSON.stringify({ letterType }),
+    }, cookie)
+    expect(response.status).toBe(201)
+    return (await response.json<{ data: { letter: { id: string } } }>()).data.letter.id
+  }
+
+  const updateDraft = async (
+    cookie: string,
+    letterId: string,
+    input: Record<string, unknown>,
+  ) => request(`/api/letters/${letterId}`, {
+    method: 'PATCH', body: JSON.stringify(input),
+  }, cookie)
+
+  const uploadPage = async (cookie: string, letterId: string, name: string, role = 'page') => {
+    const file = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0])], name, { type: 'image/jpeg' })
+    const body = new FormData()
+    body.set('file', file)
+    body.set('role', role)
+    body.set('altText', `${name} private scan`)
+    return request(`/api/letters/${letterId}/media`, { method: 'POST', body }, cookie)
+  }
+
+  it('requires authentication and keeps each draft private to its creator', async () => {
+    for (const path of ['/api/letters', '/api/letters/summary', '/api/letters/quick-dates']) {
+      expect((await request(path)).status, path).toBe(401)
+    }
+    const first = await login()
+    const second = await login('two@example.test')
+    const letterId = await createDraft(first.cookie)
+    const secret = 'A private unfinished thought only Partner One may read.'
+    expect((await updateDraft(first.cookie, letterId, {
+      title: 'Private draft', typedContent: secret, teaser: '', recipientType: null,
+      recipientUserId: null, unlockDate: null, unlockTime: '00:00',
+    })).status).toBe(200)
+
+    const ownerDetail = await request(`/api/letters/${letterId}`, {}, first.cookie)
+    expect(await ownerDetail.text()).toContain(secret)
+    const otherDetail = await request(`/api/letters/${letterId}`, {}, second.cookie)
+    expect(otherDetail.status).toBe(404)
+    const otherList = await request('/api/letters', {}, second.cookie)
+    expect(await otherList.text()).not.toContain(secret)
+    const summary = await request('/api/letters/summary', {}, first.cookie)
+    expect(await summary.json<{ data: { sealedCount: number; readyCount: number; openedCount: number } }>())
+      .toMatchObject({ data: { sealedCount: 0, readyCount: 0, openedCount: 0 } })
+  })
+
+  it('never trusts a device clock, keeps sealed content out of responses, and enforces recipient-first opening', async () => {
+    const first = await login()
+    const second = await login('two@example.test')
+    const letterId = await createDraft(first.cookie)
+    const secret = 'If this sentence arrives, the server seal has genuinely opened.'
+    const updated = await updateDraft(first.cookie, letterId, {
+      title: 'For Partner Two', typedContent: secret, teaser: 'For a future morning.',
+      recipientType: 'user', recipientUserId: 'partner-2', unlockDate: '2032-08-20', unlockTime: '08:15',
+    })
+    expect(updated.status).toBe(200)
+    const sealed = await request(`/api/letters/${letterId}/seal`, { method: 'POST' }, first.cookie)
+    expect(sealed.status).toBe(200)
+    const sealedText = await sealed.text()
+    expect(sealedText).not.toContain(secret)
+    expect(sealedText).not.toContain('typedContent')
+
+    const lockedDetail = await request(`/api/letters/${letterId}`, {}, second.cookie)
+    const lockedText = await lockedDetail.text()
+    expect(lockedDetail.status).toBe(200)
+    expect(lockedText).not.toContain(secret)
+    expect(lockedText).not.toContain('typedContent')
+    expect(lockedText).not.toContain('media')
+    const spoofedOpen = await request(`/api/letters/${letterId}/open`, {
+      method: 'POST', body: JSON.stringify({ currentTime: 9_999_999_999_999, unlocked: true }),
+    }, second.cookie)
+    expect(spoofedOpen.status).toBe(423)
+    expect(await spoofedOpen.text()).not.toContain(secret)
+    expect(await env.DB.prepare('SELECT opened_at FROM future_letters WHERE id = ?').bind(letterId).first<number | null>('opened_at')).toBeNull()
+
+    expect((await updateDraft(first.cookie, letterId, { title: 'Changed after sealing' })).status).toBe(404)
+    await env.DB.prepare('UPDATE future_letters SET unlock_at = ? WHERE id = ?').bind(Date.now() - 60_000, letterId).run()
+    const senderFirst = await request(`/api/letters/${letterId}/open`, { method: 'POST' }, first.cookie)
+    expect(senderFirst.status).toBe(403)
+
+    const [openedA, openedB] = await Promise.all([
+      request(`/api/letters/${letterId}/open`, { method: 'POST' }, second.cookie),
+      request(`/api/letters/${letterId}/open`, { method: 'POST' }, second.cookie),
+    ])
+    expect(openedA.status).toBe(200)
+    expect(openedB.status).toBe(200)
+    expect(await openedA.text()).toContain(secret)
+    const openedRow = await env.DB.prepare(`
+      SELECT status, first_opened_by_user_id, opened_at FROM future_letters WHERE id = ?
+    `).bind(letterId).first<{ status: string; first_opened_by_user_id: string; opened_at: number }>()
+    expect(openedRow).toMatchObject({ status: 'opened', first_opened_by_user_id: 'partner-2' })
+    const firstOpenedAt = openedRow?.opened_at
+
+    const senderArchive = await request(`/api/letters/${letterId}`, {}, first.cookie)
+    expect(senderArchive.status).toBe(200)
+    expect(await senderArchive.text()).toContain(secret)
+    expect((await request(`/api/letters/${letterId}/open`, { method: 'POST' }, first.cookie)).status).toBe(200)
+    expect(await env.DB.prepare('SELECT opened_at FROM future_letters WHERE id = ?').bind(letterId).first<number>('opened_at')).toBe(firstOpenedAt)
+  })
+
+  it('protects, reorders, opens, serves, and cleans up handwritten pages in private R2', async () => {
+    const first = await login()
+    const second = await login('two@example.test')
+    const letterId = await createDraft(first.cookie, 'uploaded')
+    expect((await updateDraft(first.cookie, letterId, {
+      title: 'Three handwritten pages', teaser: 'A paper time capsule.', recipientType: 'both',
+      recipientUserId: null, unlockDate: '2032-08-20', unlockTime: '00:00',
+    })).status).toBe(200)
+
+    const mediaIds: string[] = []
+    for (const name of ['page-one.jpg', 'page-two.jpg', 'page-three.jpg']) {
+      const uploaded = await uploadPage(first.cookie, letterId, name)
+      expect(uploaded.status).toBe(201)
+      mediaIds.push((await uploaded.json<{ data: { media: { id: string } } }>()).data.media.id)
+    }
+    expect((await request(`/api/letters/${letterId}/pages/${mediaIds[0]}`, {}, second.cookie)).status).toBe(404)
+    const draftPage = await request(`/api/letters/${letterId}/pages/${mediaIds[0]}`, {}, first.cookie)
+    expect(draftPage.status).toBe(200)
+    expect(draftPage.headers.get('cache-control')).toBe('private, no-store')
+
+    const reordered = await request(`/api/letters/${letterId}/media/order`, {
+      method: 'PATCH', body: JSON.stringify({ pageIds: [mediaIds[2], mediaIds[0], mediaIds[1]] }),
+    }, first.cookie)
+    expect(reordered.status).toBe(200)
+    expect((await reordered.json<{ data: { media: Array<{ id: string; role: string }> } }>()).data.media
+      .filter((item) => item.role === 'page').map((item) => item.id)).toEqual([mediaIds[2], mediaIds[0], mediaIds[1]])
+    expect((await request(`/api/letters/${letterId}/media/${mediaIds[0]}`, { method: 'DELETE' }, first.cookie)).status).toBe(200)
+
+    const stored = await env.DB.prepare(`
+      SELECT id, r2_key FROM future_letter_media WHERE future_letter_id = ? ORDER BY sort_order
+    `).bind(letterId).all<{ id: string; r2_key: string }>()
+    expect(stored.results).toHaveLength(2)
+    const remainingMediaId = stored.results[0]?.id ?? ''
+    const remainingKey = stored.results[0]?.r2_key ?? ''
+    expect(remainingKey).not.toBe('')
+    expect(await env.MEDIA.get(remainingKey)).not.toBeNull()
+
+    expect((await request(`/api/letters/${letterId}/seal`, { method: 'POST' }, first.cookie)).status).toBe(200)
+    const locked = await request(`/api/letters/${letterId}`, {}, second.cookie)
+    const lockedText = await locked.text()
+    expect(lockedText).not.toContain(remainingMediaId)
+    expect(lockedText).not.toContain(remainingKey)
+    expect(lockedText).not.toContain('/pages/')
+    expect((await request(`/api/letters/${letterId}/pages/${remainingMediaId}`, {}, first.cookie)).status).toBe(423)
+    expect((await request(`/api/letters/${letterId}/pages/${remainingMediaId}`, {}, second.cookie)).status).toBe(423)
+
+    await env.DB.prepare('UPDATE future_letters SET unlock_at = ? WHERE id = ?').bind(Date.now() - 60_000, letterId).run()
+    const opened = await request(`/api/letters/${letterId}/open`, { method: 'POST' }, first.cookie)
+    const openedText = await opened.text()
+    expect(opened.status).toBe(200)
+    expect(openedText).toContain(remainingMediaId)
+    expect(openedText).not.toContain(remainingKey)
+    expect((await request(`/api/letters/${letterId}/pages/${remainingMediaId}`, {}, second.cookie)).status).toBe(200)
+
+    expect((await request(`/api/letters/${letterId}`, {
+      method: 'DELETE', body: JSON.stringify({ confirmation: 'not delete' }),
+    }, first.cookie)).status).toBe(400)
+    expect((await request(`/api/letters/${letterId}`, {
+      method: 'DELETE', body: JSON.stringify({ confirmation: 'DELETE' }),
+    }, first.cookie)).status).toBe(200)
+    expect(await env.DB.prepare('SELECT COUNT(*) AS total FROM future_letter_media WHERE future_letter_id = ?').bind(letterId).first<number>('total')).toBe(0)
+    expect(await env.MEDIA.get(remainingKey)).toBeNull()
+  })
+
+  it('validates relationship-local dates and caps concurrent-safe page storage at twelve', async () => {
+    const { cookie } = await login()
+    const dates = await request('/api/letters/quick-dates', {}, cookie)
+    const datePayload = await dates.json<{ data: { timeZone: string; nextAnniversary: string; nextMilestone: string } }>()
+    expect(datePayload.data.timeZone).toBe('Europe/London')
+    expect(datePayload.data.nextAnniversary).toMatch(/^\d{4}-08-20$/u)
+    expect(datePayload.data.nextMilestone).toMatch(/^\d{4}-(02|08)-20$/u)
+
+    const typedId = await createDraft(cookie)
+    const nonexistentLondonTime = await updateDraft(cookie, typedId, {
+      title: 'DST test', typedContent: 'Test', teaser: '', recipientType: 'both', recipientUserId: null,
+      unlockDate: '2027-03-28', unlockTime: '01:30',
+    })
+    expect(nonexistentLondonTime.status).toBe(400)
+
+    const uploadedId = await createDraft(cookie, 'uploaded')
+    for (let index = 0; index < 12; index += 1) {
+      expect((await uploadPage(cookie, uploadedId, `page-${index + 1}.jpg`)).status).toBe(201)
+    }
+    expect((await uploadPage(cookie, uploadedId, 'page-13.jpg')).status).toBe(409)
+    expect(await env.DB.prepare(`
+      SELECT COUNT(*) AS total FROM future_letter_media WHERE future_letter_id = ? AND media_role = 'page'
+    `).bind(uploadedId).first<number>('total')).toBe(12)
+    expect((await request(`/api/letters/${uploadedId}`, {
+      method: 'DELETE', body: JSON.stringify({ confirmation: 'DELETE' }),
+    }, cookie)).status).toBe(200)
   })
 })

@@ -9,7 +9,14 @@
 - Keep exactly two deliberately provisioned accounts, no public registration, and no secrets in source.
 - Keep TMDB behind the Worker using only the `TMDB_API_READ_TOKEN` secret; the browser must never receive it.
 - Store only soundtrack metadata and approved outbound links, never copyrighted audio.
-- Keep Phase 3 limited to Movie Night, Game Night, and Soundtrack; do not start Phase 4 persistence features.
+- Keep Phase 4 relationship-shared: activities, plans, history, and bucket items must always derive membership and attribution from the session.
+- Activity and bucket completion photos must link one Memory and reuse its private R2 media; never duplicate upload ownership or binaries.
+- Use the two live profile display names for attribution; do not add separate participant-name fields.
+- Future Letters are backend time-locked: device time never controls unlock, drafts are creator-private, sealed letters are immutable, and locked content is never returned to the browser.
+- Keep Future Letter uploads in private R2 behind repeated Worker authorization; locked responses and future exports must never expose bodies, media IDs/URLs, R2 keys, or other protected payloads.
+- Individual letters open first for their actual profile recipient; both-of-us letters open for either member; opened letters then join the shared archive.
+- Preserve the existing accounts and live profile names. Do not implement Anniversary Wrapped or full backup/export, and never let later export work bypass a letter lock.
+- Phase 6 is reserved for cinematic effects and UI polish; do not add heavy 3D/WebGL/animation work during functional phases.
 - Do not add Supabase or Firebase, or invent production authentication/upload behaviour.
 - Extend finished components instead of replacing them without cause.
 - Run typecheck, lint, tests, and a production build before considering work complete.

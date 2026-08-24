@@ -46,6 +46,50 @@ import {
 } from './routes/games'
 import { createSong, deleteSong, listSongs, updateSong } from './routes/songs'
 import {
+  activityStats,
+  cancelPlannedActivity,
+  completePlannedActivity,
+  createActivity,
+  createPlannedActivity,
+  deleteActivity,
+  deleteActivityHistory,
+  hideActivity,
+  listActivities,
+  listActivityHistory,
+  listPlannedActivities,
+  randomActivity,
+  restoreActivity,
+  saveActivity,
+  unsaveActivity,
+  updateActivity,
+  updateActivityHistory,
+  updatePlannedActivity,
+} from './routes/activities'
+import {
+  bucketStats,
+  completeBucketItem,
+  createBucketItem,
+  deleteBucketItem,
+  listBucketItems,
+  randomBucketItem,
+  updateBucketItem,
+} from './routes/bucket-list'
+import {
+  createLetter,
+  deleteLetter,
+  deleteLetterMedia,
+  getLetter,
+  letterQuickDates,
+  letterSummary,
+  listLetters,
+  openLetter,
+  reorderLetterPages,
+  sealLetter,
+  serveLetterMedia,
+  updateLetter,
+  uploadLetterMedia,
+} from './routes/letters'
+import {
   ApiError,
   apiFailure,
   apiSuccess,
@@ -87,6 +131,134 @@ const handleApi = async (request: Request, env: Env): Promise<Response> => {
   if (pathname === '/api/relationship') {
     if (request.method === 'GET') return getRelationship(request, env)
     if (request.method === 'PATCH') return updateRelationship(request, env)
+    return methodNotAllowed()
+  }
+
+  if (pathname === '/api/letters') {
+    if (request.method === 'GET') return listLetters(request, env)
+    if (request.method === 'POST') return createLetter(request, env)
+    return methodNotAllowed()
+  }
+  if (pathname === '/api/letters/summary') {
+    return request.method === 'GET' ? letterSummary(request, env) : methodNotAllowed()
+  }
+  if (pathname === '/api/letters/quick-dates') {
+    return request.method === 'GET' ? letterQuickDates(request, env) : methodNotAllowed()
+  }
+  const letterSealMatch = pathname.match(/^\/api\/letters\/([^/]+)\/seal$/u)
+  if (letterSealMatch?.[1]) {
+    return request.method === 'POST' ? sealLetter(request, env, letterSealMatch[1]) : methodNotAllowed()
+  }
+  const letterOpenMatch = pathname.match(/^\/api\/letters\/([^/]+)\/open$/u)
+  if (letterOpenMatch?.[1]) {
+    return request.method === 'POST' ? openLetter(request, env, letterOpenMatch[1]) : methodNotAllowed()
+  }
+  const letterMediaOrderMatch = pathname.match(/^\/api\/letters\/([^/]+)\/media\/order$/u)
+  if (letterMediaOrderMatch?.[1]) {
+    return request.method === 'PATCH'
+      ? reorderLetterPages(request, env, letterMediaOrderMatch[1])
+      : methodNotAllowed()
+  }
+  const letterMediaMatch = pathname.match(/^\/api\/letters\/([^/]+)\/media\/([^/]+)$/u)
+  if (letterMediaMatch?.[1] && letterMediaMatch[2]) {
+    return request.method === 'DELETE'
+      ? deleteLetterMedia(request, env, letterMediaMatch[1], letterMediaMatch[2])
+      : methodNotAllowed()
+  }
+  const letterUploadMatch = pathname.match(/^\/api\/letters\/([^/]+)\/media$/u)
+  if (letterUploadMatch?.[1]) {
+    return request.method === 'POST'
+      ? uploadLetterMedia(request, env, letterUploadMatch[1])
+      : methodNotAllowed()
+  }
+  const letterPageMatch = pathname.match(/^\/api\/letters\/([^/]+)\/pages\/([^/]+)$/u)
+  if (letterPageMatch?.[1] && letterPageMatch[2]) {
+    return request.method === 'GET' || request.method === 'HEAD'
+      ? serveLetterMedia(request, env, letterPageMatch[1], letterPageMatch[2])
+      : methodNotAllowed()
+  }
+  const letterMatch = pathname.match(/^\/api\/letters\/([^/]+)$/u)
+  if (letterMatch?.[1]) {
+    if (request.method === 'GET') return getLetter(request, env, letterMatch[1])
+    if (request.method === 'PATCH') return updateLetter(request, env, letterMatch[1])
+    if (request.method === 'DELETE') return deleteLetter(request, env, letterMatch[1])
+    return methodNotAllowed()
+  }
+
+  if (pathname === '/api/activities') {
+    if (request.method === 'GET') return listActivities(request, env)
+    if (request.method === 'POST') return createActivity(request, env)
+    return methodNotAllowed()
+  }
+  if (pathname === '/api/activities/random') {
+    return request.method === 'POST' ? randomActivity(request, env) : methodNotAllowed()
+  }
+  if (pathname === '/api/activities/stats') {
+    return request.method === 'GET' ? activityStats(request, env) : methodNotAllowed()
+  }
+  const activityHideMatch = pathname.match(/^\/api\/activities\/([^/]+)\/hide$/u)
+  if (activityHideMatch?.[1]) {
+    if (request.method === 'POST') return hideActivity(request, env, activityHideMatch[1])
+    if (request.method === 'DELETE') return restoreActivity(request, env, activityHideMatch[1])
+    return methodNotAllowed()
+  }
+  const activitySaveMatch = pathname.match(/^\/api\/activities\/([^/]+)\/save$/u)
+  if (activitySaveMatch?.[1]) {
+    if (request.method === 'POST') return saveActivity(request, env, activitySaveMatch[1])
+    if (request.method === 'DELETE') return unsaveActivity(request, env, activitySaveMatch[1])
+    return methodNotAllowed()
+  }
+  const activityMatch = pathname.match(/^\/api\/activities\/([^/]+)$/u)
+  if (activityMatch?.[1]) {
+    if (request.method === 'PATCH') return updateActivity(request, env, activityMatch[1])
+    if (request.method === 'DELETE') return deleteActivity(request, env, activityMatch[1])
+    return methodNotAllowed()
+  }
+
+  if (pathname === '/api/planned-activities') {
+    if (request.method === 'GET') return listPlannedActivities(request, env)
+    if (request.method === 'POST') return createPlannedActivity(request, env)
+    return methodNotAllowed()
+  }
+  const planCompleteMatch = pathname.match(/^\/api\/planned-activities\/([^/]+)\/complete$/u)
+  if (planCompleteMatch?.[1]) {
+    return request.method === 'POST' ? completePlannedActivity(request, env, planCompleteMatch[1]) : methodNotAllowed()
+  }
+  const planMatch = pathname.match(/^\/api\/planned-activities\/([^/]+)$/u)
+  if (planMatch?.[1]) {
+    if (request.method === 'PATCH') return updatePlannedActivity(request, env, planMatch[1])
+    if (request.method === 'DELETE') return cancelPlannedActivity(request, env, planMatch[1])
+    return methodNotAllowed()
+  }
+  if (pathname === '/api/activity-history') {
+    return request.method === 'GET' ? listActivityHistory(request, env) : methodNotAllowed()
+  }
+  const activityHistoryMatch = pathname.match(/^\/api\/activity-history\/([^/]+)$/u)
+  if (activityHistoryMatch?.[1]) {
+    if (request.method === 'PATCH') return updateActivityHistory(request, env, activityHistoryMatch[1])
+    if (request.method === 'DELETE') return deleteActivityHistory(request, env, activityHistoryMatch[1])
+    return methodNotAllowed()
+  }
+
+  if (pathname === '/api/bucket-list') {
+    if (request.method === 'GET') return listBucketItems(request, env)
+    if (request.method === 'POST') return createBucketItem(request, env)
+    return methodNotAllowed()
+  }
+  if (pathname === '/api/bucket-list/stats') {
+    return request.method === 'GET' ? bucketStats(request, env) : methodNotAllowed()
+  }
+  if (pathname === '/api/bucket-list/random') {
+    return request.method === 'GET' ? randomBucketItem(request, env) : methodNotAllowed()
+  }
+  const bucketCompleteMatch = pathname.match(/^\/api\/bucket-list\/([^/]+)\/complete$/u)
+  if (bucketCompleteMatch?.[1]) {
+    return request.method === 'POST' ? completeBucketItem(request, env, bucketCompleteMatch[1]) : methodNotAllowed()
+  }
+  const bucketMatch = pathname.match(/^\/api\/bucket-list\/([^/]+)$/u)
+  if (bucketMatch?.[1]) {
+    if (request.method === 'PATCH') return updateBucketItem(request, env, bucketMatch[1])
+    if (request.method === 'DELETE') return deleteBucketItem(request, env, bucketMatch[1])
     return methodNotAllowed()
   }
   if (pathname === '/api/memories') {

@@ -9,6 +9,10 @@ import { apiRequest, type ApiMemory, type MemoryPage } from '@/lib/api'
 import { RelationshipCounter } from '@/components/relationship/RelationshipCounter'
 import { CinematicLink } from '@/components/ui/Button'
 import { PageTransition, Reveal, SectionHeader } from '@/components/ui/Page'
+import { activityService } from '@/features/activities/activity-service'
+import type { PlannedActivity } from '@/features/activities/types'
+import { letterService } from '@/features/letters/letter-service'
+import type { LetterSummary } from '@/features/letters/types'
 
 const features = [
   { to: '/story', index: '01', title: 'Our Story', copy: 'The chapters, turning points, and ordinary days that became ours.', icon: Heart, className: 'md:col-span-7', image: '/assets/images/blue-hour-beach.webp' },
@@ -24,6 +28,8 @@ const HomePage = () => {
   const navigate = useNavigate()
   const auth = useAuth()
   const [memory, setMemory] = useState<ApiMemory | null>(null)
+  const [nextPlan, setNextPlan] = useState<PlannedActivity | null>(null)
+  const [letterSummary, setLetterSummary] = useState<LetterSummary | null>(null)
   const relationship = auth.relationship
   const partner1Name = auth.profiles.find((profile) => profile.id === relationship?.partner1UserId)?.displayName ?? relationshipConfig.partner1Name
   const partner2Name = auth.profiles.find((profile) => profile.id === relationship?.partner2UserId)?.displayName ?? relationshipConfig.partner2Name
@@ -45,6 +51,27 @@ const HomePage = () => {
       }
     }
     void loadFeaturedMemory()
+  }, [])
+
+  useEffect(() => {
+    const loadLetterSummary = async () => {
+      try { setLetterSummary(await letterService.summary()) }
+      catch { setLetterSummary(null) }
+    }
+    void loadLetterSummary()
+  }, [])
+
+  useEffect(() => {
+    const loadNextPlan = async () => {
+      try {
+        const plans = await activityService.plans('planned')
+        const currentDate = new Date().toISOString().slice(0, 10)
+        setNextPlan(plans.find((plan) => plan.plannedDate >= currentDate) ?? null)
+      } catch {
+        setNextPlan(null)
+      }
+    }
+    void loadNextPlan()
   }, [])
 
   const memoryCard: MemoryCardItem | null = memory ? (() => {
@@ -104,6 +131,16 @@ const HomePage = () => {
         </div>
       </Reveal>
 
+      {nextPlan && (
+        <Reveal className="mx-auto max-w-[1500px] px-5 pb-20 sm:px-8 lg:px-12 lg:pb-28">
+          <Link to="/activities" className="group grid gap-7 rounded-[var(--radius-lg)] border border-line bg-elevated p-7 transition-colors hover:border-accent/50 sm:p-9 lg:grid-cols-[auto_1fr_auto] lg:items-center">
+            <span className="grid size-14 place-items-center rounded-full bg-accent text-white"><CalendarHeart size={22} aria-hidden="true" /></span>
+            <span><span className="editorial-rule">Next in our calendar</span><strong className="mt-3 block font-display text-4xl font-medium sm:text-5xl">{nextPlan.activityName}</strong><span className="mt-2 block text-sm text-muted">{nextPlan.plannedDate}{nextPlan.plannedTime ? ` · ${nextPlan.plannedTime}` : ''}{nextPlan.note ? ` · ${nextPlan.note}` : ''}</span></span>
+            <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.13em] text-accent">Open the plan <ArrowRight size={15} className="transition-transform group-hover:translate-x-1" aria-hidden="true" /></span>
+          </Link>
+        </Reveal>
+      )}
+
       {memory && memoryCard && (
         <section className="cinematic-surface overflow-hidden py-20 sm:py-28">
           <div className="mx-auto grid max-w-[1500px] items-center gap-12 px-5 sm:px-8 lg:grid-cols-[minmax(20rem,0.72fr)_minmax(0,1.28fr)] lg:px-12">
@@ -134,7 +171,11 @@ const HomePage = () => {
                   </div>
                   <div className="mt-auto">
                     <h3 className="font-display text-[clamp(2.4rem,5vw,4.2rem)] font-medium leading-[0.9]">{title}</h3>
-                    <p className={`mt-4 max-w-md ${image ? 'text-[#e4d9cc]' : 'text-muted'}`}>{copy}</p>
+                    <p className={`mt-4 max-w-md ${image ? 'text-[#e4d9cc]' : 'text-muted'}`}>{to === '/letters' && letterSummary?.readyCount
+                      ? `${letterSummary.readyCount} ${letterSummary.readyCount === 1 ? 'letter has' : 'letters have'} reached the promised date.`
+                      : to === '/letters' && letterSummary?.sealedCount
+                        ? `${letterSummary.sealedCount} ${letterSummary.sealedCount === 1 ? 'letter is' : 'letters are'} waiting safely for later.`
+                        : copy}</p>
                   </div>
                 </div>
               </motion.article>
