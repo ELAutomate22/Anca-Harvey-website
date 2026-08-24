@@ -38,9 +38,9 @@ const entryStatus = (date: string): TimelineEntry['status'] => {
 const automaticTimeline = (startDate: string): StoryEntry[] => {
   const start = parseLocalDate(startDate)
   return [
-    { id: 'automatic-beginning', title: 'The Beginning', eyebrow: 'Chapter I', date: toIsoDate(start), description: 'The day this shared story began—and the date every counter and milestone grows from.', image: '/assets/images/lakeside.webp' },
-    { id: 'automatic-six-months', title: 'Six Months', eyebrow: 'Chapter II', date: toIsoDate(addCalendarMonths(start, 6)), description: 'By then, the ordinary days had already become the part worth remembering.', image: '/assets/images/cafe-hands.webp' },
-    { id: 'automatic-one-year', title: 'One Year', eyebrow: 'Chapter III', date: toIsoDate(addCalendarMonths(start, 12)), description: 'A full year of shared routes, accidental traditions, and choosing each other again.', image: '/assets/images/blue-hour-beach.webp' },
+    { id: 'automatic-beginning', title: 'The Beginning', eyebrow: 'Chapter I', date: toIsoDate(start), description: 'The day this shared story began—and the date every counter and milestone grows from.', image: '/assets/images/IMG-20260817-WA0032.jpg' },
+    { id: 'automatic-six-months', title: 'Six Months', eyebrow: 'Chapter II', date: toIsoDate(addCalendarMonths(start, 6)), description: 'By then, the ordinary days had already become the part worth remembering.', image: '/assets/images/IMG-20260817-WA0013.jpg' },
+    { id: 'automatic-one-year', title: 'One Year', eyebrow: 'Chapter III', date: toIsoDate(addCalendarMonths(start, 12)), description: 'A full year of shared routes, accidental traditions, and choosing each other again.', image: '/assets/images/IMG-20260817-WA0021.jpg' },
     { id: 'automatic-eighteen-months', title: 'One Year + Six Months', eyebrow: 'The next page', date: toIsoDate(addCalendarMonths(start, 18)), description: 'Unwritten, waiting, and already ours to arrive at.' },
   ].map((entry) => ({ ...entry, status: entryStatus(entry.date) }))
 }

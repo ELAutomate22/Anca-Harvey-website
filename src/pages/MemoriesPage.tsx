@@ -9,6 +9,7 @@ import {
   type MemoryPage,
 } from '@/lib/api'
 import { MemoryCard, type MemoryCardItem } from '@/components/media/MemoryCard'
+import { StaticMediaArchive } from '@/components/media/StaticMediaArchive'
 import { CinematicButton } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { PageHeader, PageTransition } from '@/components/ui/Page'
@@ -252,11 +253,18 @@ const MemoriesPage = () => {
       <PageHeader
         eyebrow="The memory shelf"
         title="Memories"
-        intro="Photographs, moving moments, and the tiny notes that bring the whole day back—stored privately for the two of you."
+        intro="Every photograph and moving moment chosen for this site, gathered into one complete archive—with room for new memories stored privately for the two of you."
         aside={<div className="mt-7 flex flex-wrap gap-3"><CinematicButton onClick={openCreate} variant="romantic"><Plus size={16} /> Add a memory</CinematicButton><CinematicButton onClick={takeMeBack} variant="secondary" disabled={!memories.length}><Shuffle size={16} /> Take Me Back</CinematicButton></div>}
       />
 
-      <section className="mx-auto max-w-[1500px] px-5 pb-24 sm:px-8 lg:px-12 lg:pb-36">
+      <StaticMediaArchive />
+
+      <section className="mx-auto max-w-[1500px] px-5 pb-24 pt-20 sm:px-8 sm:pt-28 lg:px-12 lg:pb-36">
+        <div className="mb-10 max-w-3xl">
+          <p className="editorial-rule">The living shelf</p>
+          <h2 className="balance mt-4 font-display text-[clamp(2.8rem,6vw,5.5rem)] font-medium leading-[0.9] tracking-[-0.035em]">Add the details only you know.</h2>
+          <p className="mt-5 max-w-2xl text-base text-muted sm:text-lg">Attach dates, places, captions, and favourites to the memories you want to keep growing together.</p>
+        </div>
         <div className="mb-8 flex flex-col gap-4 border-y border-line py-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="no-scrollbar -mx-5 flex gap-2 overflow-x-auto px-5 pb-1 sm:-mx-8 sm:px-8 lg:mx-0 lg:flex-wrap lg:px-0">
             {[...filters, ...customCategories].map((item) => <button key={item} onClick={() => setFilter(item)} aria-pressed={filter === item} className={`min-h-11 whitespace-nowrap rounded-full border px-4 text-xs font-bold uppercase tracking-[0.12em] transition-colors ${filter === item ? 'border-accent bg-accent text-[#fff8ee]' : 'border-line text-muted hover:bg-elevated hover:text-foreground'}`}>{item}</button>)}
@@ -266,7 +274,7 @@ const MemoriesPage = () => {
 
         <p role="status" className="mb-6 min-h-6 text-sm font-semibold text-accent">{error}</p>
         {loading ? <div className="grid min-h-72 place-items-center text-muted"><LoaderCircle className="animate-spin" /><span className="sr-only">Loading memories</span></div> : memories.length === 0 ? (
-          <div className="paper-surface rounded-[var(--radius-lg)] px-6 py-20 text-center"><ImagePlus className="mx-auto text-accent" /><h2 className="mt-5 font-display text-4xl">The shelf is waiting.</h2><p className="mx-auto mt-4 max-w-lg text-muted">Add the first real memory. Its details live in D1 and its media stays private in R2.</p><CinematicButton onClick={openCreate} variant="romantic" className="mt-7"><Plus size={16} /> Add the first memory</CinematicButton></div>
+          <div className="paper-surface rounded-[var(--radius-lg)] px-6 py-20 text-center"><ImagePlus className="mx-auto text-accent" /><h2 className="mt-5 font-display text-4xl">The archive is already alive.</h2><p className="mx-auto mt-4 max-w-lg text-muted">The complete collection is above. Add a memory here when you want to give a moment its date, place, and private notes.</p><CinematicButton onClick={openCreate} variant="romantic" className="mt-7"><Plus size={16} /> Add its first story</CinematicButton></div>
         ) : <div className="memory-columns">{memories.map((memory) => <MemoryCard key={memory.id} memory={toCard(memory)} onOpen={() => setSelected(memory)} />)}</div>}
 
         {nextCursor && <div className="mt-10 text-center"><CinematicButton onClick={() => void load(nextCursor)} variant="secondary" disabled={loadingMore}>{loadingMore ? <LoaderCircle size={16} className="animate-spin" /> : null}{loadingMore ? 'Loading…' : 'Load more'}</CinematicButton></div>}

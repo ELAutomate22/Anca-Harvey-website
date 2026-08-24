@@ -15,8 +15,8 @@ import { letterService } from '@/features/letters/letter-service'
 import type { LetterSummary } from '@/features/letters/types'
 
 const features = [
-  { to: '/story', index: '01', title: 'Our Story', copy: 'The chapters, turning points, and ordinary days that became ours.', icon: Heart, className: 'md:col-span-7', image: '/assets/images/blue-hour-beach.webp' },
-  { to: '/memories', index: '02', title: 'Memories', copy: 'Photographs, small notes, and moments worth stepping back into.', icon: Images, className: 'md:col-span-5', image: '/assets/images/cafe-hands.webp' },
+  { to: '/story', index: '01', title: 'Our Story', copy: 'The chapters, turning points, and ordinary days that became ours.', icon: Heart, className: 'md:col-span-7', image: '/assets/images/IMG-20260817-WA0013.jpg' },
+  { to: '/memories', index: '02', title: 'Memories', copy: 'Photographs, small notes, and moments worth stepping back into.', icon: Images, className: 'md:col-span-5', image: '/assets/images/IMG-20260817-WA0006.jpg' },
   { to: '/movies', index: '03', title: 'Movie Night', copy: 'A shared watchlist and a cure for choosing forever.', icon: Ticket, className: 'md:col-span-4', image: undefined },
   { to: '/games', index: '04', title: 'Game Night', copy: 'Something playful for the evenings that need a little chaos.', icon: Gamepad2, className: 'md:col-span-4', image: undefined },
   { to: '/soundtrack', index: '05', title: 'Our Soundtrack', copy: 'The songs that know exactly where we were.', icon: Music2, className: 'md:col-span-4', image: undefined },
@@ -109,12 +109,12 @@ const HomePage = () => {
 
         <div className="relative mx-auto min-h-[31rem] w-full max-w-[42rem] sm:min-h-[40rem] lg:min-h-[48rem]">
           <motion.figure initial={{ opacity: 0, rotate: 1.5, y: 20 }} animate={{ opacity: 1, rotate: 1.5, y: 0 }} transition={{ delay: 0.12, duration: 0.62 }} className="paper-surface absolute right-[2%] top-[2%] w-[79%] rotate-[1.5deg] p-2.5 sm:p-3">
-            <div className="aspect-[4/5] overflow-hidden"><img src="/assets/images/lakeside.webp" alt="A fictional couple embracing by a lake at golden hour" className="h-full w-full object-cover object-[58%_center]" /></div>
-            <figcaption className="px-2 pb-1 pt-3 font-display text-xl italic text-muted">The long way home</figcaption>
+            <div className="aspect-[4/5] overflow-hidden"><img src="/assets/images/IMG-20260817-WA0021.jpg" alt="The couple sitting together outside" className="h-full w-full object-cover object-center" /></div>
+            <figcaption className="px-2 pb-1 pt-3 font-display text-xl italic text-muted">Us, in the moment</figcaption>
           </motion.figure>
           <motion.figure initial={{ opacity: 0, rotate: -6, x: -15 }} animate={{ opacity: 1, rotate: -6, x: 0 }} transition={{ delay: 0.28, duration: 0.58 }} className="paper-surface absolute bottom-[1%] left-[1%] w-[47%] -rotate-6 p-2.5 sm:left-[-2%] sm:w-[44%]">
-            <div className="aspect-[4/5] overflow-hidden"><img src="/assets/images/cafe-hands.webp" alt="Two people holding hands at a cafe table" className="h-full w-full object-cover" /></div>
-            <figcaption className="px-1 pt-3 font-display text-lg italic text-muted">Rain at four</figcaption>
+            <div className="aspect-[4/5] overflow-hidden"><img src="/assets/images/IMG-20260817-WA0000.jpg" alt="A close portrait of the couple together" className="h-full w-full object-cover" /></div>
+            <figcaption className="px-1 pt-3 font-display text-lg italic text-muted">A quiet favourite</figcaption>
           </motion.figure>
           <div className="absolute bottom-[7%] right-[3%] z-10 hidden w-40 border-l border-gold pl-4 text-xs uppercase tracking-[0.14em] text-muted sm:block">An archive of<br />the life between<br />the milestones</div>
         </div>
@@ -185,7 +185,7 @@ const HomePage = () => {
       </section>
 
       <section className="relative overflow-hidden border-y border-line px-5 py-28 text-center sm:px-8 lg:py-44">
-        <img src="/assets/images/blue-hour-beach.webp" alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover opacity-[0.16] grayscale" />
+        <img src="/assets/images/IMG-20260817-WA0021.jpg" alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover opacity-[0.16] grayscale" />
         <div className="absolute inset-0 bg-background/70" />
         <Reveal className="relative mx-auto max-w-5xl">
           <Heart className="mx-auto text-accent" size={24} strokeWidth={1.4} aria-hidden="true" />
