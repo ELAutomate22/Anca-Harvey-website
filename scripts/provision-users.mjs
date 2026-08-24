@@ -33,7 +33,7 @@ const values = developmentSeed
       partner2Password: 'LocalOnly-Partner-Two!2026',
       partner2Name: 'Partner Two',
       title: 'Our Corner',
-      startDate: '2025-08-20',
+      startDate: '2025-08-28',
       timezone: 'Europe/London',
     }
   : {

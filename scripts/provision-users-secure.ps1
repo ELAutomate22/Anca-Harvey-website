@@ -109,7 +109,7 @@ try {
 
   Write-Host ''
   $env:RELATIONSHIP_TITLE = Read-WithDefault 'Relationship title' 'Our Corner'
-  $env:RELATIONSHIP_START_DATE = Read-WithDefault 'Relationship start date (YYYY-MM-DD)' '2025-08-20'
+  $env:RELATIONSHIP_START_DATE = Read-WithDefault 'Relationship start date (YYYY-MM-DD)' '2025-08-28'
   $env:RELATIONSHIP_TIMEZONE = Read-WithDefault 'IANA timezone' 'Europe/London'
 
   & pnpm db:provision:remote

@@ -1,6 +1,6 @@
 export const PARTNER_1_NAME = 'Anca'
 export const PARTNER_2_NAME = 'Harvey'
-export const RELATIONSHIP_START_DATE = '2025-08-20'
+export const RELATIONSHIP_START_DATE = '2025-08-28'
 export const RELATIONSHIP_TITLE = 'Our Corner'
 export const RELATIONSHIP_TIMEZONE = 'Europe/London'
 

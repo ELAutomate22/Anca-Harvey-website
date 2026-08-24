@@ -79,7 +79,7 @@ beforeEach(async () => {
   ])
   await env.DB.prepare(`
     INSERT INTO relationships (id, title, start_date, timezone, partner_1_user_id, partner_2_user_id, created_at, updated_at)
-    VALUES ('primary', 'Our Corner', '2025-08-20', 'Europe/London', 'partner-1', 'partner-2', ?, ?)
+    VALUES ('primary', 'Our Corner', '2025-08-28', 'Europe/London', 'partner-1', 'partner-2', ?, ?)
   `).bind(now, now).run()
 })
 
@@ -148,13 +148,13 @@ describe('relationship, memory, and private media authorization', () => {
     const { cookie } = await login()
     const unconfirmed = await request('/api/relationship', {
       method: 'PATCH',
-      body: JSON.stringify({ startDate: '2025-08-21' }),
+      body: JSON.stringify({ startDate: '2025-08-29' }),
     }, cookie)
     expect(unconfirmed.status).toBe(409)
 
     const confirmed = await request('/api/relationship', {
       method: 'PATCH',
-      body: JSON.stringify({ startDate: '2025-08-21', confirmStartDateChange: true }),
+      body: JSON.stringify({ startDate: '2025-08-29', confirmStartDateChange: true }),
     }, cookie)
     expect(confirmed.status).toBe(200)
   })
@@ -674,8 +674,8 @@ describe('Phase 5 server-authoritative future letters', () => {
     const dates = await request('/api/letters/quick-dates', {}, cookie)
     const datePayload = await dates.json<{ data: { timeZone: string; nextAnniversary: string; nextMilestone: string } }>()
     expect(datePayload.data.timeZone).toBe('Europe/London')
-    expect(datePayload.data.nextAnniversary).toMatch(/^\d{4}-08-20$/u)
-    expect(datePayload.data.nextMilestone).toMatch(/^\d{4}-(02|08)-20$/u)
+    expect(datePayload.data.nextAnniversary).toMatch(/^\d{4}-08-28$/u)
+    expect(datePayload.data.nextMilestone).toMatch(/^\d{4}-(02|08)-28$/u)
 
     const typedId = await createDraft(cookie)
     const nonexistentLondonTime = await updateDraft(cookie, typedId, {
