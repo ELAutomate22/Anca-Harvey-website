@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Edit3, Heart, ImagePlus, LoaderCircle, Plus, Shuffle, Trash2, UploadCloud, X } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { formatDate } from '@/lib/date'
 import {
   apiRequest,
@@ -14,6 +15,8 @@ import { CinematicButton } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { PageHeader, PageTransition } from '@/components/ui/Page'
 import { useSearchParams } from 'react-router-dom'
+import { useReducedMotionPreference } from '@/hooks/useReducedMotionPreference'
+import { motionDuration, premiumEase } from '@/lib/motion'
 
 type Filter = 'All' | 'Photos' | 'Videos' | 'Favourites' | 'Trips' | 'Dates' | 'Funny' | 'Milestones'
 const filters: Filter[] = ['All', 'Photos', 'Videos', 'Favourites', 'Trips', 'Dates', 'Funny', 'Milestones']
@@ -72,6 +75,7 @@ const queryForFilter = (filter: string, cursor: string | null, sort: 'newest' | 
 }
 
 const MemoriesPage = () => {
+  const reducedMotion = useReducedMotionPreference()
   const [searchParams] = useSearchParams()
   const linkedMemoryId = searchParams.get('memory')
   const [filter, setFilter] = useState<string>('All')
@@ -89,6 +93,12 @@ const MemoriesPage = () => {
   const [createdMemoryId, setCreatedMemoryId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [formMessage, setFormMessage] = useState('')
+  const [timeTravel, setTimeTravel] = useState<ApiMemory | null>(null)
+  const travelTimerRef = useRef<number | null>(null)
+
+  useEffect(() => () => {
+    if (travelTimerRef.current !== null) window.clearTimeout(travelTimerRef.current)
+  }, [])
 
   const load = useCallback(async (cursor: string | null = null) => {
     if (cursor) setLoadingMore(true)
@@ -123,7 +133,18 @@ const MemoriesPage = () => {
 
   const takeMeBack = () => {
     const random = memories[Math.floor(Math.random() * memories.length)]
-    if (random) setSelected(random)
+    if (!random) return
+    if (reducedMotion) {
+      setSelected(random)
+      return
+    }
+    if (travelTimerRef.current !== null) window.clearTimeout(travelTimerRef.current)
+    setTimeTravel(random)
+    travelTimerRef.current = window.setTimeout(() => {
+      setSelected(random)
+      setTimeTravel(null)
+      travelTimerRef.current = null
+    }, 720)
   }
 
   const openCreate = () => {
@@ -256,6 +277,31 @@ const MemoriesPage = () => {
         intro="Every photograph and moving moment chosen for this site, gathered into one complete archive—with room for new memories stored privately for the two of you."
         aside={<div className="mt-7 flex flex-wrap gap-3"><CinematicButton onClick={openCreate} variant="romantic"><Plus size={16} /> Add a memory</CinematicButton><CinematicButton onClick={takeMeBack} variant="secondary" disabled={!memories.length}><Shuffle size={16} /> Take Me Back</CinematicButton></div>}
       />
+
+      <AnimatePresence>
+        {timeTravel && (() => {
+          const card = toCard(timeTravel)
+          return (
+            <motion.div
+              role="status"
+              aria-live="polite"
+              className="fixed inset-0 z-[45] grid place-items-center overflow-hidden bg-[#171210]/92 px-6 text-center text-[#fff8ee] backdrop-blur-md"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: motionDuration.fast }}
+            >
+              {card.image && <motion.img src={card.image} alt="" className="absolute inset-0 h-full w-full object-cover opacity-20" initial={{ scale: 1.08 }} animate={{ scale: 1 }} transition={{ duration: motionDuration.cinematic, ease: premiumEase }} />}
+              <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12, duration: motionDuration.base, ease: premiumEase }} className="relative max-w-3xl">
+                <Shuffle className="mx-auto text-[#d7b77e]" size={28} strokeWidth={1.4} aria-hidden="true" />
+                <p className="mt-5 text-xs font-bold uppercase tracking-[0.2em] text-[#d7b77e]">Taking you back</p>
+                <p className="mt-5 font-display text-[clamp(3.5rem,10vw,8rem)] leading-[0.82]">{timeTravel.title}</p>
+                <p className="mt-6 text-sm uppercase tracking-[0.14em] text-white/70">{formatDate(timeTravel.date)}</p>
+              </motion.div>
+            </motion.div>
+          )
+        })()}
+      </AnimatePresence>
 
       <StaticMediaArchive />
 

@@ -30,7 +30,7 @@ const PosterFallback = ({ title }: { title: string }) => (
 const MoviePoster = ({ movie, onOpen }: { movie: MovieSummary; onOpen: (movie: MovieSummary) => void }) => {
   const poster = tmdbImage(movie.posterPath, 'w342')
   return (
-    <motion.button whileHover={{ y: -5 }} whileTap={{ scale: 0.985 }} onClick={() => onOpen(movie)} className="group w-full text-left" aria-label={`Open ${movie.title} details`}>
+    <motion.button whileHover={{ y: -5 }} whileTap={{ scale: 0.985 }} onClick={() => onOpen(movie)} className="movie-poster group w-full text-left" aria-label={`Open ${movie.title} details`}>
       <div className="relative aspect-[2/3] overflow-hidden rounded-[var(--radius-md)] border border-white/10 bg-[#251d1a] shadow-[var(--shadow-deep)]">
         {poster ? <img src={poster} alt={`Poster for ${movie.title}`} loading="lazy" className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.025]" /> : <PosterFallback title={movie.title} />}
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent" />

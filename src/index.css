@@ -35,6 +35,18 @@
   --radius-md: 0.75rem;
   --radius-lg: 1.25rem;
   --nav-height: 4.75rem;
+  --motion-instant: 120ms;
+  --motion-fast: 180ms;
+  --motion-base: 280ms;
+  --motion-reveal: 480ms;
+  --motion-cinematic: 680ms;
+  --ease-premium: cubic-bezier(0.22, 1, 0.36, 1);
+  --z-atmosphere: 0;
+  --z-content: 10;
+  --z-navigation: 40;
+  --z-modal: 50;
+  --z-grain: 60;
+  --z-transition: 70;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -67,13 +79,36 @@ body {
 
 body::before {
   position: fixed;
-  z-index: 60;
+  z-index: var(--z-grain);
   inset: 0;
   pointer-events: none;
   content: "";
   opacity: 0.032;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.72' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.66'/%3E%3C/svg%3E");
   mix-blend-mode: multiply;
+}
+
+.cinematic-atmosphere {
+  position: fixed;
+  z-index: var(--z-atmosphere);
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 82% 8%, rgb(159 128 80 / 0.045), transparent 30rem),
+    radial-gradient(circle at 14% 88%, rgb(110 35 49 / 0.035), transparent 34rem);
+}
+
+.cinematic-atmosphere--warm::after {
+  position: absolute;
+  top: -18rem;
+  right: -16rem;
+  width: 46rem;
+  height: 46rem;
+  border-radius: 999px;
+  content: "";
+  background: radial-gradient(circle, rgb(214 170 168 / 0.1), transparent 66%);
+  filter: blur(18px);
 }
 
 button,
@@ -147,6 +182,90 @@ img {
   border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
   background: color-mix(in srgb, var(--surface-elevated) 93%, transparent);
   box-shadow: var(--shadow-soft), inset 0 1px rgb(255 255 255 / 0.7);
+}
+
+.photo-develop {
+  position: relative;
+  overflow: hidden;
+}
+
+.photo-develop__veil {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(105deg, rgb(31 26 24 / 0.96), rgb(110 35 49 / 0.42) 55%, rgb(243 238 228 / 0.75));
+}
+
+.cinematic-action {
+  box-shadow: 0 0 0 rgb(110 35 49 / 0);
+  transition:
+    color var(--motion-fast) ease,
+    background-color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease,
+    box-shadow var(--motion-base) var(--ease-premium);
+}
+
+.cinematic-action:hover,
+.cinematic-action:focus-visible {
+  box-shadow: 0 10px 28px rgb(57 24 30 / 0.12);
+}
+
+.timeline-node {
+  transition: box-shadow var(--motion-base) var(--ease-premium), border-color var(--motion-base) ease;
+}
+
+.timeline-node--future {
+  box-shadow: 0 0 0 7px rgb(159 128 80 / 0.06);
+}
+
+.feature-card svg {
+  transition: transform var(--motion-base) var(--ease-premium), color var(--motion-fast) ease;
+}
+
+.feature-card[data-feature="03"]:hover svg,
+.feature-card[data-feature="03"]:focus-within svg { transform: rotate(-8deg) scale(1.08); }
+.feature-card[data-feature="04"]:hover svg,
+.feature-card[data-feature="04"]:focus-within svg { transform: rotate(9deg); }
+.feature-card[data-feature="05"]:hover svg,
+.feature-card[data-feature="05"]:focus-within svg { transform: translateY(-3px); }
+.feature-card[data-feature="06"]:hover svg,
+.feature-card[data-feature="06"]:focus-within svg { transform: scale(1.08); }
+.feature-card[data-feature="07"]:hover svg,
+.feature-card[data-feature="07"]:focus-within svg { transform: translateY(-2px) rotate(-5deg); }
+
+.letter-transition {
+  z-index: var(--z-transition);
+}
+
+.letter-envelope__flap {
+  transform-origin: top;
+  transition: transform var(--motion-base) var(--ease-premium), filter var(--motion-base) ease;
+}
+
+.letter-card:hover .letter-envelope__flap,
+.letter-card:focus-within .letter-envelope__flap {
+  transform: rotateX(8deg);
+  filter: brightness(1.025);
+}
+
+.movie-poster > div {
+  transform-origin: 50% 80%;
+  transition: transform var(--motion-base) var(--ease-premium), border-color var(--motion-fast) ease;
+}
+
+.movie-poster:hover > div,
+.movie-poster:focus-visible > div {
+  transform: perspective(850px) rotateX(1.2deg) rotateY(-1.4deg);
+  border-color: rgb(215 183 126 / 0.48);
+}
+
+.soundtrack-card:focus-within .vinyl-disc,
+.soundtrack-card:active .vinyl-disc,
+.group:focus-within > div > .vinyl-disc,
+.group:active > div > .vinyl-disc {
+  transform: translateX(22%) !important;
+  filter: brightness(1.08);
 }
 
 .cinematic-surface {
@@ -226,4 +345,6 @@ img {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+  .photo-develop__veil { display: none; }
+  .cinematic-atmosphere--warm::after { filter: none; }
 }

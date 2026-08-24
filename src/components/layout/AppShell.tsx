@@ -19,6 +19,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { relationshipConfig } from '@/config/relationship'
 import { useAuth } from '@/features/auth/auth-context'
 import { Modal } from '@/components/ui/Modal'
+import { CinematicAtmosphere } from '@/components/effects/CinematicAtmosphere'
 
 const desktopPrimary = [
   ['/', 'Home'], ['/story', 'Our Story'], ['/memories', 'Memories'], ['/movies', 'Movie Night'],
@@ -86,6 +87,7 @@ export const AppShell = ({ children }: { children: ReactNode }) => {
   return (
     <div className="min-h-dvh">
       <a href="#main-content" className="skip-link">Skip to content</a>
+      <CinematicAtmosphere />
 
       <header className={`fixed inset-x-0 top-0 z-40 border-b transition-all duration-300 ${scrolled ? 'border-line/70 bg-background/92 shadow-[0_8px_30px_rgb(42_28_22/0.06)] backdrop-blur-xl' : 'border-transparent bg-background/72 backdrop-blur-md'}`}>
         <div className="mx-auto flex h-[var(--nav-height)] max-w-[1580px] items-center justify-between px-5 sm:px-8 lg:px-12">
@@ -107,13 +109,13 @@ export const AppShell = ({ children }: { children: ReactNode }) => {
         </div>
       </header>
 
-      <main id="main-content" tabIndex={-1} className="pt-[var(--nav-height)] pb-[calc(6.5rem+env(safe-area-inset-bottom))] outline-none min-[1200px]:pb-0">
+      <main id="main-content" tabIndex={-1} className="relative z-10 pt-[var(--nav-height)] pb-[calc(6.5rem+env(safe-area-inset-bottom))] outline-none min-[1200px]:pb-0">
         <AnimatePresence mode="wait">{children}</AnimatePresence>
       </main>
 
-      <footer className="border-t border-line px-5 py-12 text-center min-[1200px]:block">
+      <footer className="relative z-10 border-t border-line px-5 py-12 text-center min-[1200px]:block">
         <p className="font-display text-2xl italic text-muted">A place for everything we keep becoming.</p>
-        <p className="mt-3 text-[0.68rem] font-bold uppercase tracking-[0.18em] text-muted">Private by design · Phase Five</p>
+        <p className="mt-3 text-[0.68rem] font-bold uppercase tracking-[0.18em] text-muted">Private by design · Our living archive</p>
       </footer>
 
       <nav aria-label="Mobile navigation" className="fixed inset-x-0 bottom-0 z-40 border-t border-line/80 bg-elevated/95 px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_35px_rgb(45_31_24/0.08)] backdrop-blur-xl min-[1200px]:hidden">

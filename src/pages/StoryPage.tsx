@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Clock3, Edit3, LoaderCircle, LockKeyhole, Plus, Trash2 } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { motion, useScroll, useSpring } from 'framer-motion'
 import { addCalendarMonths, formatDate, parseLocalDate } from '@/lib/date'
 import { relationshipConfig } from '@/config/relationship'
 import { useAuth } from '@/features/auth/auth-context'
@@ -9,6 +9,8 @@ import type { TimelineEntry } from '@/types/content'
 import { CinematicButton } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { PageHeader, PageTransition, Reveal } from '@/components/ui/Page'
+import { PhotoReveal } from '@/components/effects/PhotoReveal'
+import { useReducedMotionPreference } from '@/hooks/useReducedMotionPreference'
 
 interface StoryEntry extends TimelineEntry {
   custom?: ApiTimelineEntry
@@ -54,6 +56,10 @@ const emptyForm = (): TimelineForm => ({
 
 const StoryPage = () => {
   const auth = useAuth()
+  const reducedMotion = useReducedMotionPreference()
+  const timelineRef = useRef<HTMLDivElement>(null)
+  const { scrollYProgress } = useScroll({ target: timelineRef, offset: ['start 72%', 'end 72%'] })
+  const timelineProgress = useSpring(scrollYProgress, { stiffness: 95, damping: 24, mass: 0.45 })
   const startDate = auth.relationship?.startDate ?? relationshipConfig.startDate
   const [customEntries, setCustomEntries] = useState<ApiTimelineEntry[]>([])
   const [modalOpen, setModalOpen] = useState(false)
@@ -143,16 +149,16 @@ const StoryPage = () => {
       <p role="status" className="mx-auto mb-6 min-h-6 max-w-[1400px] px-5 text-sm font-semibold text-accent sm:px-8 lg:px-12">{loading ? 'Opening the timeline…' : message}</p>
 
       <section className="mx-auto max-w-[1400px] px-5 pb-24 sm:px-8 lg:px-12 lg:pb-36">
-        <div className="relative">
+        <div ref={timelineRef} className="relative">
           <div className="absolute bottom-0 left-[0.78rem] top-0 w-px bg-line md:left-1/2" aria-hidden="true" />
-          <motion.div initial={{ scaleY: 0 }} whileInView={{ scaleY: 1 }} viewport={{ once: true, amount: 0.08 }} transition={{ duration: 1.1 }} style={{ transformOrigin: 'top' }} className="absolute left-[0.78rem] top-0 h-2/3 w-px bg-accent md:left-1/2" aria-hidden="true" />
+          <motion.div style={{ scaleY: reducedMotion ? 1 : timelineProgress, transformOrigin: 'top' }} className="absolute bottom-0 left-[0.78rem] top-0 w-px bg-accent md:left-1/2" aria-hidden="true" />
 
           {entries.map((entry, index) => {
             const isLeft = index % 2 === 0
             const isUpcoming = entry.status === 'upcoming'
             return (
               <Reveal key={entry.id} className="relative grid gap-6 pb-20 pl-12 md:grid-cols-2 md:gap-20 md:pl-0 lg:pb-28">
-                <div className={`absolute left-0 top-1.5 z-10 grid size-7 place-items-center rounded-full border-2 bg-background md:left-1/2 md:-translate-x-1/2 ${isUpcoming ? 'border-line text-muted' : 'border-accent text-accent'}`}><span className={`size-2 rounded-full ${isUpcoming ? 'bg-line' : 'bg-accent'}`} /></div>
+                <div className={`timeline-node absolute left-0 top-1.5 z-10 grid size-7 place-items-center rounded-full border-2 bg-background md:left-1/2 md:-translate-x-1/2 ${isUpcoming ? 'timeline-node--future border-line text-muted' : 'border-accent text-accent'}`}><span className={`size-2 rounded-full ${isUpcoming ? 'bg-line' : 'bg-accent'}`} /></div>
                 <article className={`${isLeft ? 'md:col-start-1 md:text-right' : 'md:col-start-2'} ${isUpcoming ? 'opacity-70' : ''}`}>
                   <p className="text-[0.7rem] font-bold uppercase tracking-[0.17em] text-accent">{entry.eyebrow}</p>
                   <h2 className="mt-3 font-display text-[clamp(2.7rem,6vw,5.3rem)] font-medium leading-[0.86]">{entry.title}</h2>
@@ -161,7 +167,7 @@ const StoryPage = () => {
                   {isUpcoming && <span className="mt-6 inline-flex items-center gap-2 rounded-full border border-line px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-muted"><LockKeyhole size={14} /> Upcoming</span>}
                   {entry.custom && <div className={`mt-6 flex flex-wrap gap-2 ${isLeft ? 'md:justify-end' : ''}`}><button type="button" onClick={() => openEdit(entry.custom!)} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-line px-3 text-xs font-bold uppercase tracking-[0.1em]"><Edit3 size={14} /> Edit</button><button type="button" onClick={() => void remove(entry.custom!)} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-line px-3 text-xs font-bold uppercase tracking-[0.1em] text-accent"><Trash2 size={14} /> Delete</button></div>}
                 </article>
-                {entry.image && <motion.figure whileHover={{ rotate: isLeft ? 1 : -1 }} className={`paper-surface mt-4 w-full max-w-md rounded-[var(--radius-md)] p-2.5 ${isLeft ? 'md:col-start-2 md:row-start-1' : 'md:col-start-1 md:row-start-1 md:ml-auto'}`}><div className="aspect-[4/3] overflow-hidden rounded-sm"><img src={entry.image} alt="" loading="lazy" className="h-full w-full object-cover" /></div><figcaption className="flex items-center gap-2 px-2 pb-1 pt-3 font-display text-xl italic text-muted"><Clock3 size={15} /> {entry.eyebrow}</figcaption></motion.figure>}
+                {entry.image && <PhotoReveal delay={Math.min(index, 4) * 0.035} className={`mt-4 w-full max-w-md ${isLeft ? 'md:col-start-2 md:row-start-1' : 'md:col-start-1 md:row-start-1 md:ml-auto'}`}><motion.figure whileHover={reducedMotion ? undefined : { rotate: isLeft ? 1 : -1 }} className="paper-surface rounded-[var(--radius-md)] p-2.5"><div className="aspect-[4/3] overflow-hidden rounded-sm"><img src={entry.image} alt="" loading="lazy" className="h-full w-full object-cover" /></div><figcaption className="flex items-center gap-2 px-2 pb-1 pt-3 font-display text-xl italic text-muted"><Clock3 size={15} /> {entry.eyebrow}</figcaption></motion.figure></PhotoReveal>}
               </Reveal>
             )
           })}

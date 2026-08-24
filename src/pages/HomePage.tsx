@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowDownRight, ArrowRight, CalendarHeart, Gamepad2, Heart, Images, Mail, Music2, Ticket } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, useMotionValue, useSpring } from 'framer-motion'
 import { relationshipConfig } from '@/config/relationship'
 import { useAuth } from '@/features/auth/auth-context'
 import { MemoryCard, type MemoryCardItem } from '@/components/media/MemoryCard'
@@ -13,6 +13,10 @@ import { activityService } from '@/features/activities/activity-service'
 import type { PlannedActivity } from '@/features/activities/types'
 import { letterService } from '@/features/letters/letter-service'
 import type { LetterSummary } from '@/features/letters/types'
+import { PhotoReveal } from '@/components/effects/PhotoReveal'
+import { useEffectTier } from '@/hooks/useEffectTier'
+import { useReducedMotionPreference } from '@/hooks/useReducedMotionPreference'
+import { staggerChild, staggerContainer } from '@/lib/motion'
 
 const features = [
   { to: '/story', index: '01', title: 'Our Story', copy: 'The chapters, turning points, and ordinary days that became ours.', icon: Heart, className: 'md:col-span-7', image: '/assets/images/IMG-20260817-WA0013.jpg' },
@@ -23,6 +27,43 @@ const features = [
   { to: '/activities', index: '06', title: 'Date Ideas', copy: 'Plans for when “what should we do?” needs a better answer.', icon: CalendarHeart, className: 'md:col-span-7', image: undefined },
   { to: '/letters', index: '07', title: 'Letters to the Future', copy: 'Words sent ahead, waiting for the right day.', icon: Mail, className: 'md:col-span-5', image: undefined },
 ] as const
+
+const HeroPhotoStack = () => {
+  const tier = useEffectTier()
+  const reducedMotion = useReducedMotionPreference()
+  const pointerX = useMotionValue(0)
+  const pointerY = useMotionValue(0)
+  const x = useSpring(pointerX, { stiffness: 90, damping: 24 })
+  const y = useSpring(pointerY, { stiffness: 90, damping: 24 })
+
+  return (
+    <motion.div
+      onPointerMove={(event) => {
+        if (tier !== 'high' || reducedMotion) return
+        const bounds = event.currentTarget.getBoundingClientRect()
+        pointerX.set(((event.clientX - bounds.left) / bounds.width - 0.5) * 10)
+        pointerY.set(((event.clientY - bounds.top) / bounds.height - 0.5) * 8)
+      }}
+      onPointerLeave={() => { pointerX.set(0); pointerY.set(0) }}
+      style={tier === 'high' && !reducedMotion ? { x, y } : undefined}
+      className="relative mx-auto min-h-[31rem] w-full max-w-[42rem] sm:min-h-[40rem] lg:min-h-[48rem]"
+    >
+      <PhotoReveal delay={0.12} className="paper-surface absolute right-[2%] top-[2%] w-[79%] rotate-[1.5deg] p-2.5 sm:p-3">
+        <figure>
+          <div className="aspect-[4/5] overflow-hidden"><img src="/assets/images/IMG-20260817-WA0021.jpg" alt="The couple sitting together outside" className="h-full w-full object-cover object-center" /></div>
+          <figcaption className="px-2 pb-1 pt-3 font-display text-xl italic text-muted">Us, in the moment</figcaption>
+        </figure>
+      </PhotoReveal>
+      <PhotoReveal delay={0.28} className="paper-surface absolute bottom-[1%] left-[1%] w-[47%] -rotate-6 p-2.5 sm:left-[-2%] sm:w-[44%]">
+        <figure>
+          <div className="aspect-[4/5] overflow-hidden"><img src="/assets/images/IMG-20260817-WA0000.jpg" alt="A close portrait of the couple together" className="h-full w-full object-cover" /></div>
+          <figcaption className="px-1 pt-3 font-display text-lg italic text-muted">A quiet favourite</figcaption>
+        </figure>
+      </PhotoReveal>
+      <div className="absolute bottom-[7%] right-[3%] z-10 hidden w-40 border-l border-gold pl-4 text-xs uppercase tracking-[0.14em] text-muted sm:block">An archive of<br />the life between<br />the milestones</div>
+    </motion.div>
+  )
+}
 
 const HomePage = () => {
   const navigate = useNavigate()
@@ -35,6 +76,7 @@ const HomePage = () => {
   const partner2Name = auth.profiles.find((profile) => profile.id === relationship?.partner2UserId)?.displayName ?? relationshipConfig.partner2Name
   const relationshipTitle = relationship?.title ?? relationshipConfig.title
   const startDate = relationship?.startDate ?? relationshipConfig.startDate
+  const reducedMotion = useReducedMotionPreference()
 
   useEffect(() => {
     const loadFeaturedMemory = async () => {
@@ -94,30 +136,20 @@ const HomePage = () => {
   return (
     <PageTransition>
       <section className="relative mx-auto grid min-h-[calc(100dvh-var(--nav-height))] max-w-[1600px] items-center gap-10 overflow-hidden px-5 py-14 sm:px-8 md:py-20 lg:grid-cols-[minmax(0,0.93fr)_minmax(30rem,1.07fr)] lg:px-12 xl:gap-20">
-        <div className="relative z-10 max-w-3xl lg:pb-16">
-          <p className="editorial-rule">{relationshipTitle} · Vol. I</p>
-          <h1 className="balance mt-7 font-display text-[clamp(4.4rem,10vw,10.5rem)] font-medium leading-[0.72] tracking-[-0.055em]">
+        <motion.div variants={staggerContainer} initial={reducedMotion ? false : 'hidden'} animate="visible" className="relative z-10 max-w-3xl lg:pb-16">
+          <motion.p variants={staggerChild} className="editorial-rule">{relationshipTitle} · Vol. I</motion.p>
+          <motion.h1 variants={staggerChild} className="balance mt-7 font-display text-[clamp(4.4rem,10vw,10.5rem)] font-medium leading-[0.72] tracking-[-0.055em]">
             <span className="block">{partner1Name}</span>
             <span className="ml-[0.45em] block italic text-accent">&amp; {partner2Name}</span>
-          </h1>
-          <p className="mt-9 max-w-md text-lg leading-8 text-muted sm:text-xl">Our little corner of the world—made for the things we never want to lose.</p>
-          <div className="mt-9 flex flex-wrap items-center gap-4">
+          </motion.h1>
+          <motion.p variants={staggerChild} className="mt-9 max-w-md text-lg leading-8 text-muted sm:text-xl">Our little corner of the world—made for the things we never want to lose.</motion.p>
+          <motion.div variants={staggerChild} className="mt-9 flex flex-wrap items-center gap-4">
             <CinematicLink to="/story" variant="romantic">Begin our story <ArrowRight size={16} aria-hidden="true" /></CinematicLink>
             <a href="#together" className="inline-flex min-h-12 items-center gap-2 px-3 text-xs font-bold uppercase tracking-[0.16em] text-muted transition-colors hover:text-accent">Together, in numbers <ArrowDownRight size={16} aria-hidden="true" /></a>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
 
-        <div className="relative mx-auto min-h-[31rem] w-full max-w-[42rem] sm:min-h-[40rem] lg:min-h-[48rem]">
-          <motion.figure initial={{ opacity: 0, rotate: 1.5, y: 20 }} animate={{ opacity: 1, rotate: 1.5, y: 0 }} transition={{ delay: 0.12, duration: 0.62 }} className="paper-surface absolute right-[2%] top-[2%] w-[79%] rotate-[1.5deg] p-2.5 sm:p-3">
-            <div className="aspect-[4/5] overflow-hidden"><img src="/assets/images/IMG-20260817-WA0021.jpg" alt="The couple sitting together outside" className="h-full w-full object-cover object-center" /></div>
-            <figcaption className="px-2 pb-1 pt-3 font-display text-xl italic text-muted">Us, in the moment</figcaption>
-          </motion.figure>
-          <motion.figure initial={{ opacity: 0, rotate: -6, x: -15 }} animate={{ opacity: 1, rotate: -6, x: 0 }} transition={{ delay: 0.28, duration: 0.58 }} className="paper-surface absolute bottom-[1%] left-[1%] w-[47%] -rotate-6 p-2.5 sm:left-[-2%] sm:w-[44%]">
-            <div className="aspect-[4/5] overflow-hidden"><img src="/assets/images/IMG-20260817-WA0000.jpg" alt="A close portrait of the couple together" className="h-full w-full object-cover" /></div>
-            <figcaption className="px-1 pt-3 font-display text-lg italic text-muted">A quiet favourite</figcaption>
-          </motion.figure>
-          <div className="absolute bottom-[7%] right-[3%] z-10 hidden w-40 border-l border-gold pl-4 text-xs uppercase tracking-[0.14em] text-muted sm:block">An archive of<br />the life between<br />the milestones</div>
-        </div>
+        <HeroPhotoStack />
       </section>
 
       <Reveal className="mx-auto max-w-[1500px] px-5 py-16 sm:px-8 lg:px-12 lg:py-28" delay={0.05}>
@@ -162,7 +194,7 @@ const HomePage = () => {
         <div className="grid gap-4 md:grid-cols-12 lg:gap-6">
           {features.map(({ to, index, title, copy, icon: Icon, className, image }) => (
             <Link key={to} to={to} className={className}>
-              <motion.article whileHover={{ y: -5 }} className={`group relative flex min-h-[20rem] h-full overflow-hidden rounded-[var(--radius-lg)] border border-line p-6 sm:p-8 ${image ? 'text-[#fff8ee]' : 'paper-surface'}`}>
+              <motion.article whileHover={reducedMotion ? undefined : { y: -5 }} data-feature={index} className={`feature-card group relative flex min-h-[20rem] h-full overflow-hidden rounded-[var(--radius-lg)] border border-line p-6 sm:p-8 ${image ? 'text-[#fff8ee]' : 'paper-surface'}`}>
                 {image && <><img src={image} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.035]" /><div className="absolute inset-0 bg-gradient-to-t from-[#1d1512]/90 via-[#1d1512]/20 to-transparent" /></>}
                 <div className="relative z-10 flex w-full flex-col">
                   <div className="flex items-center justify-between">

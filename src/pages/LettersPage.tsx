@@ -30,7 +30,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useAuth } from '@/features/auth/auth-context'
 import { letterService, uploadLetterMedia } from '@/features/letters/letter-service'
 import type {
@@ -46,6 +46,8 @@ import type {
 import { CinematicButton } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { PageHeader, PageTransition } from '@/components/ui/Page'
+import { useReducedMotionPreference } from '@/hooks/useReducedMotionPreference'
+import { motionDuration, premiumEase } from '@/lib/motion'
 
 const fieldClass = 'mt-2 min-h-12 w-full rounded-md border border-line bg-background px-4 text-base text-foreground'
 const steps = ['Letter', 'Recipient', 'Delivery', 'Preview'] as const
@@ -142,14 +144,14 @@ const LetterCard = ({
   onElapsed: () => void
 }) => {
   const available = letter.status === 'ready' && letter.canOpen
-  return <motion.article initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className={`paper-surface relative flex min-h-[26rem] flex-col overflow-hidden rounded-[var(--radius-lg)] p-6 sm:p-8 ${letter.status === 'sealed' ? 'opacity-90' : ''}`}>
+  return <motion.article initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className={`letter-card paper-surface relative flex min-h-[26rem] flex-col overflow-hidden rounded-[var(--radius-lg)] p-6 sm:p-8 ${letter.status === 'sealed' ? 'opacity-90' : ''}`}>
     <div className="flex items-center justify-between gap-3 text-[0.67rem] font-bold uppercase tracking-[0.14em] text-muted">
       <span>{letter.senderName} → {letter.recipientName ?? 'Not chosen'}</span>
       <span className={letter.status === 'ready' ? 'text-accent' : ''}>{statusLabel(letter, currentUserId)}</span>
     </div>
-    <div className="relative mx-auto mt-8 aspect-[16/10] w-full max-w-sm overflow-hidden rounded-md border border-[#bda98f] bg-[#d9c9b3] shadow-inner" aria-hidden="true">
+    <div className="letter-envelope relative mx-auto mt-8 aspect-[16/10] w-full max-w-sm overflow-hidden rounded-md border border-[#bda98f] bg-[#d9c9b3] shadow-inner" aria-hidden="true">
       <div className="absolute inset-x-0 bottom-0 h-[64%] [clip-path:polygon(0_100%,0_0,50%_58%,100%_0,100%_100%)] bg-[#cdb99f]" />
-      <div className="absolute inset-x-0 top-0 z-20 h-[58%] [clip-path:polygon(0_0,100%_0,50%_100%)] bg-[#e4d6c1]" />
+      <div className="letter-envelope__flap absolute inset-x-0 top-0 z-20 h-[58%] [clip-path:polygon(0_0,100%_0,50%_100%)] bg-[#e4d6c1]" />
       <div className="absolute inset-x-[9%] top-[36%] z-10 h-[64%] rounded-sm bg-[#fffaf0] p-5 shadow-md">
         <p className="font-display text-xl italic text-[#5d4d42]">{letter.status === 'opened' ? (letter.teaser || 'Opened, and kept safe.') : letter.status === 'draft' ? 'Still being written…' : 'For later…'}</p>
       </div>
@@ -208,6 +210,7 @@ const HandwrittenPreview = ({ pages }: { pages: LetterMedia[] }) => {
 
 const LettersPage = () => {
   const auth = useAuth()
+  const reducedMotion = useReducedMotionPreference()
   const [data, setData] = useState<LetterListResponse | null>(null)
   const [quickDates, setQuickDates] = useState<LetterQuickDates | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
@@ -222,7 +225,14 @@ const LettersPage = () => {
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [uploads, setUploads] = useState<UploadTask[]>([])
   const [viewer, setViewer] = useState<FutureLetter | null>(null)
+  const [sealAnimation, setSealAnimation] = useState(false)
+  const [openingLetter, setOpeningLetter] = useState<FutureLetter | null>(null)
   const lastSaved = useRef('')
+  const transitionTimer = useRef<number | null>(null)
+
+  useEffect(() => () => {
+    if (transitionTimer.current !== null) window.clearTimeout(transitionTimer.current)
+  }, [])
 
   const timeZone = data?.timeZone ?? auth.relationship?.timezone ?? 'Europe/London'
   const load = useCallback(async () => {
@@ -356,14 +366,40 @@ const LettersPage = () => {
     const saved = await persist(true); if (!saved) return
     if (!window.confirm('Seal this letter permanently? Its contents, recipient, and unlock time cannot be changed after this.')) return
     setWorking(true); setError('')
-    try { await letterService.seal(active.id); setMessage('The letter is sealed. It can no longer be edited.'); closeComposer() }
+    try {
+      await letterService.seal(active.id)
+      setMessage('The letter is sealed. It can no longer be edited.')
+      if (reducedMotion) {
+        finishClosingComposer()
+      } else {
+        setSealAnimation(true)
+        transitionTimer.current = window.setTimeout(() => {
+          setSealAnimation(false)
+          finishClosingComposer()
+          transitionTimer.current = null
+        }, 760)
+      }
+    }
     catch (caught) { setError(caught instanceof Error ? caught.message : 'The letter could not be sealed.') }
     finally { setWorking(false) }
   }
 
   const openLetter = async (letter: FutureLetter) => {
     setWorking(true); setError('')
-    try { const result = await letterService.open(letter.id); setViewer(result.letter); await load() }
+    try {
+      const result = await letterService.open(letter.id)
+      await load()
+      if (reducedMotion) {
+        setViewer(result.letter)
+      } else {
+        setOpeningLetter(result.letter)
+        transitionTimer.current = window.setTimeout(() => {
+          setOpeningLetter(null)
+          setViewer(result.letter)
+          transitionTimer.current = null
+        }, 760)
+      }
+    }
     catch (caught) { setError(caught instanceof Error ? caught.message : 'The letter could not be opened.') }
     finally { setWorking(false) }
   }
@@ -404,6 +440,45 @@ const LettersPage = () => {
       <div className="no-scrollbar mt-8 flex gap-2 overflow-x-auto pb-2" aria-label="Filter letters">{(['all', 'draft', 'sealed', 'ready', 'opened'] as Filter[]).map((value) => <button key={value} type="button" onClick={() => setFilter(value)} aria-pressed={filter === value} className={`min-h-11 shrink-0 rounded-full border px-4 text-xs font-bold capitalize ${filter === value ? 'border-accent bg-accent text-white' : 'border-line text-muted'}`}>{value} · {counts[value]}</button>)}</div>
       {loading ? <div className="grid min-h-72 place-items-center"><LoaderCircle className="animate-spin text-accent" aria-label="Loading letters" /></div> : visible.length > 0 ? <div className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-3">{visible.map((letter) => <LetterCard key={letter.id} letter={letter} timeZone={timeZone} serverNow={data?.serverNow ?? Date.now()} currentUserId={auth.user?.id ?? ''} onEdit={() => void edit(letter)} onOpen={() => void openLetter(letter)} onView={() => void viewLetter(letter)} onDelete={() => void removeLetter(letter)} onElapsed={() => void load()} />)}</div> : <div className="mt-8 border-y border-line py-20 text-center"><Inbox className="mx-auto text-accent" /><h2 className="mt-5 font-display text-5xl">Nothing in this chapter yet.</h2><p className="mt-3 text-muted">Choose another filter or send a new letter forward.</p></div>}
     </section>
+
+    <AnimatePresence>
+      {(sealAnimation || openingLetter) && (
+        <motion.div
+          role="status"
+          aria-live="polite"
+          className="letter-transition fixed inset-0 grid place-items-center bg-[#171210]/94 px-6 text-center text-[#fff8ee] backdrop-blur-md"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: motionDuration.fast }}
+        >
+          <div className="relative w-full max-w-md">
+            <motion.div
+              className="relative mx-auto aspect-[16/10] w-[82%] overflow-hidden rounded-md border border-[#bda98f] bg-[#d9c9b3] shadow-2xl"
+              initial={{ scale: 0.94, y: 18 }}
+              animate={{ scale: 1, y: 0 }}
+              transition={{ duration: motionDuration.reveal, ease: premiumEase }}
+            >
+              <div className="absolute inset-x-0 bottom-0 h-[64%] [clip-path:polygon(0_100%,0_0,50%_58%,100%_0,100%_100%)] bg-[#cdb99f]" />
+              <motion.div
+                className="absolute inset-x-0 top-0 z-20 h-[58%] origin-top [clip-path:polygon(0_0,100%_0,50%_100%)] bg-[#e4d6c1]"
+                animate={openingLetter ? { rotateX: 150, y: -4 } : { rotateX: 0 }}
+                transition={{ delay: 0.18, duration: motionDuration.reveal, ease: premiumEase }}
+              />
+              <motion.div
+                className="absolute left-1/2 top-1/2 z-30 grid size-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-accent text-white shadow-xl"
+                animate={sealAnimation ? { scale: [1.35, 0.92, 1] } : { scale: [1, 1.08, 0.96] }}
+                transition={{ duration: motionDuration.reveal, ease: premiumEase }}
+              >
+                {openingLetter ? <MailOpen size={23} /> : <LockKeyhole size={22} />}
+              </motion.div>
+            </motion.div>
+            <p className="mt-8 text-xs font-bold uppercase tracking-[0.2em] text-[#d7b77e]">{openingLetter ? 'The right day has arrived' : 'Sealed for the future'}</p>
+            <p className="mt-3 font-display text-4xl italic">{openingLetter?.title ?? active?.title ?? 'Your letter is safe.'}</p>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
 
     <Modal open={composerOpen} onClose={closeComposer} title={active ? (active.title || 'Untitled draft') : 'Begin a future letter'} panelClassName="sm:max-w-5xl">
       {!active ? <div><p className="max-w-2xl text-muted">Choose how this letter begins. A private draft is created for your account only.</p><div className="mt-7 grid gap-4 sm:grid-cols-2"><button type="button" disabled={working} onClick={() => void begin('typed')} className="paper-surface min-h-52 rounded-[var(--radius-lg)] p-7 text-left transition-colors hover:border-accent"><PenLine className="text-accent" /><strong className="mt-8 block font-display text-4xl">Type a letter</strong><span className="mt-3 block text-sm text-muted">Write in the editor and optionally add a cover image.</span></button><button type="button" disabled={working} onClick={() => void begin('uploaded')} className="paper-surface min-h-52 rounded-[var(--radius-lg)] p-7 text-left transition-colors hover:border-accent"><FileImage className="text-accent" /><strong className="mt-8 block font-display text-4xl">Upload handwriting</strong><span className="mt-3 block text-sm text-muted">Add up to 12 scans or photographs and arrange their reading order.</span></button></div>{quickDates && <button type="button" disabled={working} onClick={() => void begin('typed', true)} className="mt-4 flex min-h-16 w-full items-center justify-between gap-4 rounded-lg border border-gold/50 bg-gold/10 px-5 text-left"><span><strong className="block">Write to us for our next anniversary</strong><span className="text-sm text-muted">Both of us · {quickDates.nextAnniversary}</span></span><ArrowRight size={18} className="text-gold" /></button>}</div> : <form onSubmit={(event: FormEvent) => { event.preventDefault(); if (step < 3) setStep((value) => value + 1) }}>
