@@ -7,7 +7,6 @@ export interface StaticArchiveMedia {
   src: string
   poster?: string
   filename: string
-  label: string
   alt: string
   orientation: StaticArchiveOrientation
 }
@@ -91,22 +90,20 @@ const portraitVideoNumbers = new Set([34, 55])
 const archiveRoot = '/assets/images'
 
 const archiveNumber = (filename: string): number => Number(filename.match(/WA(\d{4})/)?.[1] ?? 0)
-const numberedLabel = (kind: 'Photograph' | 'Film', index: number): string => `${kind} ${String(index + 1).padStart(2, '0')}`
 
-export const staticArchivePhotos: StaticArchiveMedia[] = photoFiles.map((filename, index) => {
+export const staticArchivePhotos: StaticArchiveMedia[] = photoFiles.map((filename) => {
   const number = archiveNumber(filename)
   return {
     id: `photo-${number}`,
     type: 'photo',
     src: `${archiveRoot}/${filename}`,
     filename,
-    label: numberedLabel('Photograph', index),
-    alt: `Shared photograph ${index + 1} of ${photoFiles.length}`,
+    alt: 'A shared relationship photograph',
     orientation: landscapePhotoNumbers.has(number) ? 'landscape' : 'portrait',
   }
 })
 
-export const staticArchiveVideos: StaticArchiveMedia[] = videoFiles.map((filename, index) => {
+export const staticArchiveVideos: StaticArchiveMedia[] = videoFiles.map((filename) => {
   const number = archiveNumber(filename)
   return {
     id: `video-${number}`,
@@ -114,11 +111,9 @@ export const staticArchiveVideos: StaticArchiveMedia[] = videoFiles.map((filenam
     src: `${archiveRoot}/${filename}`,
     poster: `${archiveRoot}/video-posters/${filename.replace('.mp4', '.webp')}`,
     filename,
-    label: numberedLabel('Film', index),
-    alt: `Shared film ${index + 1} of ${videoFiles.length}`,
+    alt: 'A shared relationship film',
     orientation: portraitVideoNumbers.has(number) ? 'portrait' : 'landscape',
   }
 })
 
 export const staticArchiveMedia: StaticArchiveMedia[] = [...staticArchivePhotos, ...staticArchiveVideos]
-

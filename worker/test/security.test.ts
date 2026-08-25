@@ -142,6 +142,33 @@ describe('authentication and session security', () => {
     expect(crossOrigin.status).toBe(403)
     expect((await request('/api/relationship')).status).toBe(401)
   })
+
+  it('enforces JSON byte limits even when Content-Length is absent', async () => {
+    const bytes = new TextEncoder().encode(JSON.stringify({
+      email: 'one@example.test',
+      password: 'x'.repeat(5_000),
+    }))
+    const streamedRequest = new Request(`${ORIGIN}/api/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: ORIGIN,
+        'Sec-Fetch-Site': 'same-origin',
+      },
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(bytes)
+          controller.close()
+        },
+      }),
+    })
+    expect(streamedRequest.headers.get('content-length')).toBeNull()
+    const response = await exports.default.fetch(streamedRequest)
+    expect(response.status).toBe(413)
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'PAYLOAD_TOO_LARGE' },
+    })
+  })
 })
 
 describe('relationship, memory, and private media authorization', () => {
@@ -180,6 +207,11 @@ describe('relationship, memory, and private media authorization', () => {
       headers: { 'Content-Length': String(81 * 1024 * 1024 + 1) },
     }, cookie)
     expect(oversized.status).toBe(413)
+
+    const unverifiable = await request(`/api/memories/${payload.data.id}/media`, {
+      method: 'POST',
+    }, cookie)
+    expect(unverifiable.status).toBe(411)
   })
 
   it('keeps a 101-memory archive bounded with stable cursor pagination', async () => {
@@ -409,15 +441,17 @@ describe('Phase 3 private relationship features', () => {
 })
 
 describe('Phase 4 shared plans and dreams', () => {
-  it('protects every Phase 4 collection and keeps the starter catalogue substantial', async () => {
+  it('protects every Phase 4 collection and exposes the complete categorized starter catalogue', async () => {
     for (const path of ['/api/activities', '/api/planned-activities', '/api/activity-history', '/api/activities/stats', '/api/bucket-list', '/api/bucket-list/stats', '/api/bucket-list/random']) {
       expect((await request(path)).status, path).toBe(401)
     }
     const { cookie } = await login()
     const response = await request('/api/activities', {}, cookie)
-    const payload = await response.json<{ data: Array<{ id: string; isBuiltin: boolean }> }>()
+    const payload = await response.json<{ data: Array<{ id: string; isBuiltin: boolean; category: string }> }>()
     expect(response.status).toBe(200)
-    expect(payload.data.filter((activity) => activity.isBuiltin).length).toBeGreaterThanOrEqual(80)
+    const starters = payload.data.filter((activity) => activity.isBuiltin)
+    expect(starters).toHaveLength(177)
+    expect(new Set(starters.map((activity) => activity.category)).size).toBe(19)
   })
 
   it('persists custom, saved, and hidden activities and avoids the eight most recent suggestions', async () => {
@@ -545,8 +579,15 @@ describe('Phase 5 server-authoritative future letters', () => {
     expect(await ownerDetail.text()).toContain(secret)
     const otherDetail = await request(`/api/letters/${letterId}`, {}, second.cookie)
     expect(otherDetail.status).toBe(404)
+    expect((await updateDraft(second.cookie, letterId, {
+      title: 'Partner tried to change this', typedContent: 'This must never be saved.',
+    })).status).toBe(404)
+    expect((await request(`/api/letters/${letterId}`, {
+      method: 'DELETE', body: JSON.stringify({ confirmation: 'DELETE' }),
+    }, second.cookie)).status).toBe(404)
     const otherList = await request('/api/letters', {}, second.cookie)
     expect(await otherList.text()).not.toContain(secret)
+    expect(await env.DB.prepare('SELECT title FROM future_letters WHERE id = ?').bind(letterId).first<string>('title')).toBe('Private draft')
     const summary = await request('/api/letters/summary', {}, first.cookie)
     expect(await summary.json<{ data: { sealedCount: number; readyCount: number; openedCount: number } }>())
       .toMatchObject({ data: { sealedCount: 0, readyCount: 0, openedCount: 0 } })

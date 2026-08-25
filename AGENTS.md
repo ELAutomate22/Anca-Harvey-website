@@ -15,13 +15,17 @@
 - Future Letters are backend time-locked: device time never controls unlock, drafts are creator-private, sealed letters are immutable, and locked content is never returned to the browser.
 - Keep Future Letter uploads in private R2 behind repeated Worker authorization; locked responses and future exports must never expose bodies, media IDs/URLs, R2 keys, or other protected payloads.
 - Individual letters open first for their actual profile recipient; both-of-us letters open for either member; opened letters then join the shared archive.
-- Preserve the existing accounts and live profile names. Do not implement Anniversary Wrapped, and never let export work bypass a Letter lock.
+- Preserve the existing accounts and live profile names, and never let recap or export work bypass a Letter lock.
+- Relationship years are anniversary-based D1 views, not calendar years or stored recap snapshots. Use the shared date utilities and the documented 28 February policy for non-leap years after a 29 February start.
+- Anniversary Wrapped and This Day must aggregate only authenticated relationship-owned D1 history. Never count mock/static media, watchlist/plans/suggestions, TMDB poster binaries, drafts, locked/ready Letters, or future data.
+- Recaps may include only opened-Letter metadata; never select or return Letter bodies, media identifiers/URLs, R2 keys, draft metadata, or locked/ready payloads.
 - Phase 6 is reserved for cinematic effects and UI polish; do not add heavy 3D/WebGL/animation work during functional phases.
 - Users must be able to export relationship data through the documented, versioned backup format; raw D1 export is never the user-facing backup.
 - Backups remain private and never contain authentication secrets, session data, API credentials, R2 keys, source code, or developer static assets.
 - Full Backup includes only D1-indexed eligible private R2 media and must stream large files without whole-file or whole-archive buffering.
 - Locked and ready-but-unopened Future Letter content never enters backups. Other-user drafts never enter backups; requester drafts are explicit and off by default.
 - Restore/import is not implemented without separate explicit instruction.
+- Do not persist recap snapshots, emotional rankings, AI interpretations, or public sharing without separate explicit instruction.
 - Do not add Supabase or Firebase, or invent production authentication/upload behaviour.
 - Extend finished components instead of replacing them without cause.
 - Run typecheck, lint, tests, and a production build before considering work complete.

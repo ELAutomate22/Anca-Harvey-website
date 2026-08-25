@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { Edit3, Heart, ImagePlus, LoaderCircle, Plus, Shuffle, Trash2, UploadCloud, X } from 'lucide-react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Edit3, Heart, ImagePlus, LoaderCircle, Plus, Trash2, UploadCloud, X } from 'lucide-react'
 import { formatDate } from '@/lib/date'
 import {
   apiRequest,
@@ -15,8 +14,6 @@ import { CinematicButton } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { PageHeader, PageTransition } from '@/components/ui/Page'
 import { useSearchParams } from 'react-router-dom'
-import { useReducedMotionPreference } from '@/hooks/useReducedMotionPreference'
-import { motionDuration, premiumEase } from '@/lib/motion'
 
 type Filter = 'All' | 'Photos' | 'Videos' | 'Favourites' | 'Trips' | 'Dates' | 'Funny' | 'Milestones'
 const filters: Filter[] = ['All', 'Photos', 'Videos', 'Favourites', 'Trips', 'Dates', 'Funny', 'Milestones']
@@ -75,7 +72,6 @@ const queryForFilter = (filter: string, cursor: string | null, sort: 'newest' | 
 }
 
 const MemoriesPage = () => {
-  const reducedMotion = useReducedMotionPreference()
   const [searchParams] = useSearchParams()
   const linkedMemoryId = searchParams.get('memory')
   const [filter, setFilter] = useState<string>('All')
@@ -93,12 +89,6 @@ const MemoriesPage = () => {
   const [createdMemoryId, setCreatedMemoryId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [formMessage, setFormMessage] = useState('')
-  const [timeTravel, setTimeTravel] = useState<ApiMemory | null>(null)
-  const travelTimerRef = useRef<number | null>(null)
-
-  useEffect(() => () => {
-    if (travelTimerRef.current !== null) window.clearTimeout(travelTimerRef.current)
-  }, [])
 
   const load = useCallback(async (cursor: string | null = null) => {
     if (cursor) setLoadingMore(true)
@@ -130,22 +120,6 @@ const MemoriesPage = () => {
       .catch((caught: unknown) => { if (active) setError(caught instanceof Error ? caught.message : 'That associated memory could not be opened.') })
     return () => { active = false }
   }, [linkedMemoryId])
-
-  const takeMeBack = () => {
-    const random = memories[Math.floor(Math.random() * memories.length)]
-    if (!random) return
-    if (reducedMotion) {
-      setSelected(random)
-      return
-    }
-    if (travelTimerRef.current !== null) window.clearTimeout(travelTimerRef.current)
-    setTimeTravel(random)
-    travelTimerRef.current = window.setTimeout(() => {
-      setSelected(random)
-      setTimeTravel(null)
-      travelTimerRef.current = null
-    }, 720)
-  }
 
   const openCreate = () => {
     setEditing(null)
@@ -275,33 +249,8 @@ const MemoriesPage = () => {
         eyebrow="The memory shelf"
         title="Memories"
         intro="Every photograph and moving moment chosen for this site, gathered into one complete archive—with room for new memories stored privately for the two of you."
-        aside={<div className="mt-7 flex flex-wrap gap-3"><CinematicButton onClick={openCreate} variant="romantic"><Plus size={16} /> Add a memory</CinematicButton><CinematicButton onClick={takeMeBack} variant="secondary" disabled={!memories.length}><Shuffle size={16} /> Take Me Back</CinematicButton></div>}
+        aside={<CinematicButton onClick={openCreate} variant="romantic" className="mt-7"><Plus size={16} /> Add a memory</CinematicButton>}
       />
-
-      <AnimatePresence>
-        {timeTravel && (() => {
-          const card = toCard(timeTravel)
-          return (
-            <motion.div
-              role="status"
-              aria-live="polite"
-              className="fixed inset-0 z-[45] grid place-items-center overflow-hidden bg-[#171210]/92 px-6 text-center text-[#fff8ee] backdrop-blur-md"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: motionDuration.fast }}
-            >
-              {card.image && <motion.img src={card.image} alt="" className="absolute inset-0 h-full w-full object-cover opacity-20" initial={{ scale: 1.08 }} animate={{ scale: 1 }} transition={{ duration: motionDuration.cinematic, ease: premiumEase }} />}
-              <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12, duration: motionDuration.base, ease: premiumEase }} className="relative max-w-3xl">
-                <Shuffle className="mx-auto text-[#d7b77e]" size={28} strokeWidth={1.4} aria-hidden="true" />
-                <p className="mt-5 text-xs font-bold uppercase tracking-[0.2em] text-[#d7b77e]">Taking you back</p>
-                <p className="mt-5 font-display text-[clamp(3.5rem,10vw,8rem)] leading-[0.82]">{timeTravel.title}</p>
-                <p className="mt-6 text-sm uppercase tracking-[0.14em] text-white/70">{formatDate(timeTravel.date)}</p>
-              </motion.div>
-            </motion.div>
-          )
-        })()}
-      </AnimatePresence>
 
       <StaticMediaArchive />
 
@@ -328,7 +277,7 @@ const MemoriesPage = () => {
 
       <Modal open={Boolean(selected)} onClose={() => setSelected(null)} title={selected?.title ?? 'Memory'} panelClassName="sm:max-w-6xl">
         {selected && <div className="grid gap-8 lg:grid-cols-[1.3fr_0.7fr] lg:items-start">
-          <div className="grid gap-3 sm:grid-cols-2">{selected.media.length ? selected.media.map((media) => <figure key={media.id} className="group relative overflow-hidden rounded-lg bg-surface">{media.type === 'image' ? <img src={media.url} alt={media.altText || selected.title} className="max-h-[67dvh] h-full w-full object-cover" /> : <video src={media.url} controls playsInline preload="metadata" className="max-h-[67dvh] h-full w-full object-contain" aria-label={media.altText || selected.title} />}<button type="button" onClick={() => void removeMedia(selected, media)} className="absolute right-2 top-2 grid size-10 place-items-center rounded-full bg-cinematic/85 text-white opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100" aria-label={`Remove ${media.originalFilename}`}><X size={16} /></button></figure>) : <div className="grid aspect-[4/3] place-items-center rounded-lg bg-surface text-muted sm:col-span-2">No media attached yet.</div>}</div>
+          <div className="grid gap-3 sm:grid-cols-2">{selected.media.length ? selected.media.map((media) => <figure key={media.id} className="group relative overflow-hidden rounded-lg bg-surface">{media.type === 'image' ? <img src={media.url} alt={media.altText || selected.title} className="max-h-[67dvh] h-full w-full object-cover" /> : <video src={media.url} controls muted loop playsInline preload="metadata" onMouseEnter={(event) => void event.currentTarget.play().catch(() => undefined)} onMouseLeave={(event) => { event.currentTarget.pause(); event.currentTarget.currentTime = 0 }} onFocus={(event) => void event.currentTarget.play().catch(() => undefined)} onBlur={(event) => { event.currentTarget.pause(); event.currentTarget.currentTime = 0 }} className="max-h-[67dvh] h-full w-full object-contain" aria-label={media.altText || selected.title} />}<button type="button" onClick={() => void removeMedia(selected, media)} className="absolute right-2 top-2 grid size-10 place-items-center rounded-full bg-cinematic/85 text-white opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100" aria-label={`Remove ${media.originalFilename}`}><X size={16} /></button></figure>) : <div className="grid aspect-[4/3] place-items-center rounded-lg bg-surface text-muted sm:col-span-2">No media attached yet.</div>}</div>
           <div><p className="editorial-rule">{selected.category}</p><p className="mt-6 font-display text-3xl italic leading-tight sm:text-4xl">“{selected.caption || 'A moment worth keeping.'}”</p><p className="mt-6 text-sm font-semibold uppercase tracking-[0.12em] text-muted">{formatDate(selected.date)}{selected.location ? ` · ${selected.location}` : ''}</p>{selected.favorite && <p className="mt-6 flex items-center gap-2 text-sm font-semibold text-accent"><Heart size={17} fill="currentColor" /> One of our favourites</p>}<div className="mt-8 grid gap-3"><CinematicButton onClick={() => void updateFavorite(selected)} variant="secondary"><Heart size={16} /> {selected.favorite ? 'Remove favourite' : 'Make favourite'}</CinematicButton><CinematicButton onClick={() => openEdit(selected)} variant="secondary"><Edit3 size={16} /> Edit memory</CinematicButton><CinematicButton onClick={() => void removeMemory(selected)} variant="danger"><Trash2 size={16} /> Delete memory</CinematicButton></div></div>
         </div>}
       </Modal>

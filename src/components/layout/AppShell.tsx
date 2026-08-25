@@ -32,7 +32,7 @@ const secondary = [
   { to: '/activities', label: 'Date Ideas', icon: CalendarHeart },
   { to: '/letters', label: 'Letters', icon: Mail },
   { to: '/bucket-list', label: 'Bucket List', icon: ListChecks },
-  { to: '/recap', label: 'Our Year', icon: Sparkles },
+  { to: '/recap', label: 'Our Years', icon: Sparkles },
   { to: '/settings', label: 'Settings', icon: Settings },
 ] as const
 

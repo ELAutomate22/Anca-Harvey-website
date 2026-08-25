@@ -14,6 +14,7 @@ const ActivitiesPage = lazy(() => import('@/pages/ActivitiesPage'))
 const LettersPage = lazy(() => import('@/pages/LettersPage'))
 const BucketListPage = lazy(() => import('@/pages/BucketListPage'))
 const RecapPage = lazy(() => import('@/pages/RecapPage'))
+const RecapYearPage = lazy(() => import('@/pages/RecapYearPage'))
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'))
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'))
 const LoginPage = lazy(() => import('@/pages/LoginPage'))
@@ -38,6 +39,7 @@ const App = () => {
             <Route path="/letters" element={<LettersPage />} />
             <Route path="/bucket-list" element={<BucketListPage />} />
             <Route path="/recap" element={<RecapPage />} />
+            <Route path="/recap/year/:yearNumber" element={<RecapYearPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>

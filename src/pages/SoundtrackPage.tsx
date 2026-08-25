@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { ExternalLink, LoaderCircle, Music2, Pencil, Plus, Star, Trash2 } from 'lucide-react'
+import { ExternalLink, Link2, LoaderCircle, Music2, Pencil, Plus, Star, Trash2 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { CinematicButton } from '@/components/ui/Button'
@@ -13,6 +13,21 @@ const fieldClass = 'mt-2 min-h-12 w-full rounded-md border border-line bg-surfac
 const localDate = () => {
   const date = new Date()
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+type StreamingPlatform = 'spotify' | 'youtube'
+
+const streamingPlatform = (value: string): StreamingPlatform | null => {
+  if (!value.trim()) return null
+  try {
+    const url = new URL(value)
+    if (url.protocol !== 'https:') return null
+    if (url.hostname === 'open.spotify.com' || url.hostname === 'spotify.link') return 'spotify'
+    if (['youtube.com', 'www.youtube.com', 'music.youtube.com', 'youtu.be'].includes(url.hostname)) return 'youtube'
+  } catch {
+    return null
+  }
+  return null
 }
 
 const fetchSoundtrack = () => Promise.all([
@@ -40,6 +55,10 @@ const SongForm = ({ song, memories, onCancel, onSaved }: SongFormProps) => {
     isOurSong: song?.isOurSong ?? false,
   })
   const [useMemoryArtwork, setUseMemoryArtwork] = useState(Boolean(song?.artworkMediaId))
+  const [streamingLinks, setStreamingLinks] = useState<string[]>(() => {
+    const links = [song?.spotifyUrl, song?.youtubeUrl].filter((value): value is string => Boolean(value))
+    return links.length > 0 ? links : ['']
+  })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const selectedMemory = memories.find((memory) => memory.id === form.associatedMemoryId)
@@ -47,15 +66,39 @@ const SongForm = ({ song, memories, onCancel, onSaved }: SongFormProps) => {
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setSaving(true); setError('')
-    const input = { ...form, artworkMediaId: useMemoryArtwork ? (availableArtwork?.id ?? form.artworkMediaId ?? null) : null }
+    const normalizedLinks = streamingLinks.map((value) => value.trim()).filter(Boolean)
+    const platforms = normalizedLinks.map(streamingPlatform)
+    if (platforms.some((platform) => platform === null)) {
+      setError('Use a full HTTPS link from Spotify or YouTube.')
+      setSaving(false)
+      return
+    }
+    if (new Set(platforms).size !== platforms.length) {
+      setError('Add at most one Spotify link and one YouTube link.')
+      setSaving(false)
+      return
+    }
+    const spotifyUrl = normalizedLinks.find((_, index) => platforms[index] === 'spotify') ?? ''
+    const youtubeUrl = normalizedLinks.find((_, index) => platforms[index] === 'youtube') ?? ''
+    const input = {
+      ...form,
+      spotifyUrl,
+      youtubeUrl,
+      artworkMediaId: useMemoryArtwork ? (availableArtwork?.id ?? form.artworkMediaId ?? null) : null,
+    }
     try { onSaved(song ? await soundtrackService.update(song.id, input) : await soundtrackService.create(input)) } catch (caught) { setError(caught instanceof Error ? caught.message : 'The soundtrack entry could not be saved.') } finally { setSaving(false) }
   }
 
   return <form onSubmit={submit} className="grid gap-5 sm:grid-cols-2">
+    <div className="rounded-lg border border-line bg-accent/5 p-4 sm:col-span-2">
+      <div className="flex items-start gap-3"><Link2 size={18} className="mt-0.5 shrink-0 text-accent" /><div><strong className="block text-sm">Paste the song link</strong><p className="mt-1 text-xs leading-5 text-muted">Use Spotify or YouTube—including a link to a song you made yourself. Only the link and details are saved; audio is never copied.</p></div></div>
+      <div className="mt-4 space-y-3">
+        {streamingLinks.map((link, index) => <label key={index} className="block"><span className="sr-only">{index === 0 ? 'Spotify or YouTube link' : 'Second listening link'}</span><div className="relative"><input type="url" placeholder={index === 0 ? 'Paste Spotify or YouTube link' : 'Optional second link'} maxLength={1000} value={link} onChange={(event) => setStreamingLinks((current) => current.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} className={`${fieldClass} mt-0 pr-28`} /><span className="pointer-events-none absolute inset-y-0 right-4 inline-flex items-center text-[0.65rem] font-bold uppercase tracking-[0.12em] text-muted">{streamingPlatform(link) ?? (link ? 'Check link' : 'Link')}</span></div></label>)}
+      </div>
+      {streamingLinks.length === 1 ? <button type="button" onClick={() => setStreamingLinks((current) => [...current, ''])} className="mt-3 min-h-10 text-xs font-bold uppercase tracking-[0.12em] text-accent">+ Add a second listening link</button> : <button type="button" onClick={() => setStreamingLinks((current) => [current[0] ?? ''])} className="mt-3 min-h-10 text-xs font-bold uppercase tracking-[0.12em] text-muted">Remove second link</button>}
+    </div>
     <label><span className="text-xs font-bold uppercase tracking-[0.13em] text-muted">Song title</span><input required maxLength={250} value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} className={fieldClass} /></label>
     <label><span className="text-xs font-bold uppercase tracking-[0.13em] text-muted">Artist</span><input required maxLength={250} value={form.artist} onChange={(event) => setForm((current) => ({ ...current, artist: event.target.value }))} className={fieldClass} /></label>
-    <label><span className="text-xs font-bold uppercase tracking-[0.13em] text-muted">Spotify link</span><input type="url" placeholder="https://open.spotify.com/…" maxLength={1000} value={form.spotifyUrl} onChange={(event) => setForm((current) => ({ ...current, spotifyUrl: event.target.value }))} className={fieldClass} /></label>
-    <label><span className="text-xs font-bold uppercase tracking-[0.13em] text-muted">YouTube link</span><input type="url" placeholder="https://www.youtube.com/…" maxLength={1000} value={form.youtubeUrl} onChange={(event) => setForm((current) => ({ ...current, youtubeUrl: event.target.value }))} className={fieldClass} /></label>
     <label><span className="text-xs font-bold uppercase tracking-[0.13em] text-muted">Date added</span><input type="date" required value={form.addedOn} onChange={(event) => setForm((current) => ({ ...current, addedOn: event.target.value }))} className={fieldClass} /></label>
     <label><span className="text-xs font-bold uppercase tracking-[0.13em] text-muted">Associated memory</span><select value={form.associatedMemoryId ?? ''} onChange={(event) => { setForm((current) => ({ ...current, associatedMemoryId: event.target.value || null, artworkMediaId: null })); setUseMemoryArtwork(false) }} className={fieldClass}><option value="">No associated memory</option>{memories.map((memory) => <option key={memory.id} value={memory.id}>{memory.title} · {memory.date}</option>)}</select></label>
     {form.associatedMemoryId && <label className="flex min-h-12 items-center gap-3 sm:col-span-2"><input type="checkbox" checked={useMemoryArtwork} disabled={!availableArtwork} onChange={(event) => setUseMemoryArtwork(event.target.checked)} className="size-5 accent-[var(--accent)]" /><span className="text-sm">Use the first authenticated photo from this memory as the sleeve{!availableArtwork ? ' (no photo available)' : ''}</span></label>}

@@ -1,6 +1,6 @@
 # Our Corner
 
-Our Corner is a private, two-person relationship archive. Phase 7 keeps the editorial React experience and established security model, with shared Memories, Story, Movie Night, Game Night, Soundtrack, activities, a bucket list, server-time-locked Letters to the Future, and a secure portable backup system.
+Our Corner is a private, two-person relationship archive. Phase 8 keeps the editorial React experience and established security model, with shared Memories, Story, Movie Night, Game Night, Soundtrack, activities, a bucket list, server-time-locked Letters to the Future, secure portable backups, and real anniversary-based relationship retrospectives.
 
 ## Architecture
 
@@ -21,7 +21,11 @@ structured app data           authenticated user uploads only
 - R2 holds only photos, videos, and future-letter scans uploaded by an authenticated partner. The bucket must remain private; browsers receive media only through Worker routes after server-side authorization.
 - Developer-provided imagery, fonts, textures, and decorative media remain in `public/` or `src/assets/`. They are deployed as ordinary site assets, never copied to D1/R2, and are outside every relationship backup.
 
-There is no public registration, setup endpoint, password-reset flow, Supabase, Firebase, or browser-stored auth token. Anniversary Wrapped and restore/import remain intentionally deferred.
+There is no public registration, setup endpoint, password-reset flow, Supabase, Firebase, or browser-stored auth token. Restore/import remains intentionally deferred.
+
+Phase 8 Anniversary Wrapped is a dynamic read model, not a stored snapshot. `/recap` indexes anniversary-based relationship years; `/recap/year/:yearNumber` assembles one completed or current chapter from D1 history; and Home shows “This Day” only when exact prior-year content exists. Relationship years begin on `relationships.start_date`, not 1 January. A 29 February start is observed on 28 February in non-leap years, and all “today”/timestamp boundaries use the relationship IANA timezone.
+
+Recap data is intentionally selective: Memories and their D1-indexed private uploads, timeline entries, watched movie history, played game history, persistent songs, completed activities, bucket additions/completions, and opened-Letter metadata only. Watchlists, activity suggestions/plans, mock data, developer static assets, TMDB poster binaries, drafts, locked/ready Letters, and future rows are excluded. The Worker never selects Letter bodies or Letter media for retrospective responses.
 
 TMDB is called only by the authenticated Worker. The application Read Access Token is a Worker secret named `TMDB_API_READ_TOKEN`; it is never a `VITE_*` variable, frontend value, committed config value, or API response. TMDB catalogue data stays authoritative, while D1 stores only relationship-owned selections and small movie snapshots.
 
@@ -96,7 +100,7 @@ Migrations in `migrations/` are the complete reproducible schema. Do not create 
 - `movie_history` and `movie_history_ratings`: rewatch-safe diary entries with normalized half-star partner ratings.
 - `games` and `game_history`: immutable starter games, relationship-owned custom games, outcomes, winners, and ratings.
 - `songs`: relationship soundtrack metadata, approved HTTPS links, optional memory/upload associations, and a partial unique index for one Our Song.
-- `activities`, `activity_exclusions`, and `saved_activities`: 101 immutable starter ideas, relationship-owned custom ideas, per-relationship hiding, and shared saves.
+- `activities`, `activity_exclusions`, and `saved_activities`: 177 immutable starter ideas, relationship-owned custom ideas, per-relationship hiding, shared saves, and searchable category/location/budget/energy/duration filters.
 - `activity_suggestions`, `planned_activities`, and `activity_history`: repeat-aware random selections, editable/cancellable calendar plans, completion ratings/notes, attribution, and optional Memory links.
 - `bucket_list_items`: shared dreams, categories, priorities, target dates, Dreaming/Planning/Booked/Completed states, completion details, attribution, and optional Memory links.
 - `future_letters`: creator, real-profile recipient semantics, plain-text typed content, teaser, immutable sealed UTC unlock instant, opened timestamp, and first opener. The only stored states are `draft → sealed → opened`; `ready` is derived.
@@ -106,6 +110,10 @@ Migrations in `migrations/` are the complete reproducible schema. Do not create 
 Foreign keys and focused indexes cover membership, session expiry, relationship/date pagination, favourites, media ordering, timeline ordering, and idempotency cleanup.
 
 Phase 7 remains additive: `0008_backup_jobs.sql` adds `sessions.recent_auth_at`, the backup job/history table, focused history/expiry indexes, and a partial unique index enforcing one active Full Backup per relationship. Previously applied migrations are unchanged.
+
+Phase 8 requires no recap-storage migration. Its bounded, parameterized D1 aggregates are derived on request, so edits to source history are reflected immediately and no duplicate recap table can drift out of sync.
+
+`0009_expand_date_ideas.sql` adds 76 new immutable starter ideas without changing the schema or touching existing saved, hidden, planned, or completed activity records.
 
 ## Memories and media
 
@@ -158,6 +166,10 @@ All API responses use `{ success: true, data }` or `{ success: false, error: { c
 | Method | Route | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/health` | minimal environment health status |
+| `GET` | `/api/recap` | relationship-year index, current/completed states, anniversary flag, and comparison when two years are complete |
+| `GET` | `/api/recap/current` | bounded real-data story for the active relationship year |
+| `GET` | `/api/recap/year/:yearNumber` | bounded real-data story for one current/completed anniversary year |
+| `GET` | `/api/this-day` | exact month/day memories and milestones from prior years |
 | `POST` | `/api/auth/login` | validate one of the two accounts and create a session |
 | `GET` | `/api/auth/me` | current safe user, relationship, and both profiles |
 | `POST` | `/api/auth/logout` | invalidate the D1 session and clear the cookie |
@@ -280,7 +292,7 @@ The production D1 database, private R2 bucket, two users, relationship, origins,
 
 No runtime `SESSION_SECRET` is needed by the chosen server-side session design: session tokens are cryptographically random and only their hashes are stored. The provisioning values are one-time process environment inputs, not Worker bindings and never `VITE_*` variables. `TMDB_API_READ_TOKEN` remains the only catalogue runtime secret and belongs in Wrangler secrets (or local `.dev.vars`), never in Vite or source control.
 
-Phase 7 adds no environment variable, secret, Workflow, Queue, scheduled trigger, lifecycle rule, bucket, or binding. Existing `DB` and private `MEDIA` bindings are reused. For the current production environment, run `pnpm db:migrate:remote` before the normal Worker/frontend release so migration `0008_backup_jobs.sql` is applied. Do not rerun account provisioning. No deployment command is run as part of this Phase 7 implementation handoff.
+Phase 8 adds no recap table, environment variable, secret, Workflow, Queue, scheduled trigger, lifecycle rule, bucket, or binding. Migration `0009_expand_date_ideas.sql` adds the larger starter date catalogue and must be applied before the Worker/frontend release. Existing `DB` and private `MEDIA` bindings are reused. Do not rerun account provisioning.
 
 ## Troubleshooting
 
@@ -304,7 +316,7 @@ Phase 7 adds no environment variable, secret, Workflow, Queue, scheduled trigger
 
 ## Frontend routes
 
-`/movies`, `/games`, `/soundtrack`, `/activities`, `/bucket-list`, and `/letters` consume authenticated APIs while preserving the editorial visual language. Activities provides Generator, Catalogue, Saved, Plans, and History views. Bucket List provides real statuses, filters, random picks, completion progress, and Memory-backed photos. Letters provides a typed/uploaded composer, server-sealed envelopes, recipient-aware Ready actions, and an opened archive. Home uses only content-free letter counts as a restrained integration and never exposes drafts. Every Worker route independently verifies the session and relationship membership.
+`/movies`, `/games`, `/soundtrack`, `/activities`, `/bucket-list`, `/letters`, `/recap`, and `/recap/year/:yearNumber` consume authenticated APIs while preserving the editorial visual language. Activities provides Generator, Catalogue, Saved, Plans, and History views. Bucket List provides real statuses, filters, random picks, completion progress, and Memory-backed photos. Letters provides a typed/uploaded composer, server-sealed envelopes, recipient-aware Ready actions, and an opened archive. Home uses only content-free letter counts, safe opened-letter retrospective metadata, and exact “This Day” results; it never exposes drafts. Every Worker route independently verifies the session and relationship membership.
 
 Activity and bucket completion uploads do not create a second media system. The completion transaction optionally creates one normal `memories` row and stores its ID on the history/item record; the existing `/api/memories/:id/media` route owns validation and private R2 uploads. Removing a history or bucket link never silently deletes that Memory.
 

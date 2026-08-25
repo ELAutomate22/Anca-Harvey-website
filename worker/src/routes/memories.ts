@@ -1,6 +1,6 @@
 import { requireSession } from '../auth/session'
 import { bytesToBase64Url, hashText } from '../lib/crypto'
-import { ApiError, apiSuccess, readJson } from '../lib/http'
+import { ApiError, apiSuccess, readJson, requireBoundedContentLength } from '../lib/http'
 import { asRecord, isoDate, optionalBoolean, optionalString, requiredString } from '../lib/validation'
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024
@@ -335,10 +335,12 @@ const safeFilename = (name: string): string => {
 export const uploadMemoryMedia = async (request: Request, env: Env, memoryId: string): Promise<Response> => {
   const session = await requireSession(request, env)
   await getOwnedMemory(env, session.relationship.id, memoryId)
-  const declaredLength = Number(request.headers.get('content-length') ?? 0)
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_VIDEO_BYTES + 1_048_576) {
-    throw new ApiError(413, 'MEDIA_TOO_LARGE', 'The upload exceeds the maximum supported size.')
-  }
+  requireBoundedContentLength(
+    request,
+    MAX_VIDEO_BYTES + 1_048_576,
+    'MEDIA_TOO_LARGE',
+    'The upload exceeds the maximum supported size.',
+  )
 
   let formData: FormData
   try {

@@ -98,6 +98,12 @@ import {
   reauthenticateForBackup,
 } from './routes/backup'
 import {
+  recapCurrentYear,
+  recapIndex,
+  recapYear,
+  thisDay,
+} from './routes/recap'
+import {
   ApiError,
   apiFailure,
   apiSuccess,
@@ -119,6 +125,20 @@ const handleApi = async (request: Request, env: Env): Promise<Response> => {
   if (pathname === '/api/health') {
     if (request.method !== 'GET') return methodNotAllowed()
     return apiSuccess({ status: 'ok', environment: env.APP_ENV })
+  }
+
+  if (pathname === '/api/recap') {
+    return request.method === 'GET' ? recapIndex(request, env) : methodNotAllowed()
+  }
+  if (pathname === '/api/recap/current') {
+    return request.method === 'GET' ? recapCurrentYear(request, env) : methodNotAllowed()
+  }
+  const recapYearMatch = pathname.match(/^\/api\/recap\/year\/(\d{1,3})$/u)
+  if (recapYearMatch?.[1]) {
+    return request.method === 'GET' ? recapYear(request, env, recapYearMatch[1]) : methodNotAllowed()
+  }
+  if (pathname === '/api/this-day') {
+    return request.method === 'GET' ? thisDay(request, env) : methodNotAllowed()
   }
 
   if (pathname === '/api/auth/login') {

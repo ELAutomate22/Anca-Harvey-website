@@ -1,5 +1,5 @@
 import { requireSession, type AuthSession } from '../auth/session'
-import { ApiError, apiSuccess, readJson } from '../lib/http'
+import { ApiError, apiSuccess, readJson, requireBoundedContentLength } from '../lib/http'
 import { assertId, enumValue } from '../lib/phase-four'
 import { asRecord, optionalString, requiredString } from '../lib/validation'
 import { hasValidFileSignature, type AllowedMime } from './memories'
@@ -303,10 +303,12 @@ export const uploadLetterMedia = async (request: Request, env: Env, letterId: st
   assertId(letterId, 'letterId')
   const session = await requireSession(request, env)
   const letter = await getOwnedDraft(env, session.relationship.id, session.user.id, letterId)
-  const declaredLength = Number(request.headers.get('content-length') ?? 0)
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_LETTER_IMAGE_BYTES + 1_048_576) {
-    throw new ApiError(413, 'MEDIA_TOO_LARGE', 'Letter images must be 20 MB or smaller.')
-  }
+  requireBoundedContentLength(
+    request,
+    MAX_LETTER_IMAGE_BYTES + 1_048_576,
+    'MEDIA_TOO_LARGE',
+    'Letter images must be 20 MB or smaller.',
+  )
 
   let formData: FormData
   try {

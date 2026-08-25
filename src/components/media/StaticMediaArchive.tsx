@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { Camera, Film, Images, Play } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import {
@@ -20,6 +20,79 @@ const filters: { id: ArchiveFilter; label: string; count: number }[] = [
 const aspectClass = {
   portrait: 'aspect-[4/5]',
   landscape: 'aspect-[4/3]',
+}
+
+interface ArchiveTileProps {
+  item: StaticArchiveMedia
+  onOpen: (item: StaticArchiveMedia) => void
+}
+
+const ArchiveTile = ({ item, onOpen }: ArchiveTileProps) => {
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  const startPreview = useCallback(() => {
+    if (item.type !== 'video' || !videoRef.current) return
+    void videoRef.current.play().catch(() => undefined)
+  }, [item.type])
+
+  const stopPreview = useCallback(() => {
+    if (item.type !== 'video' || !videoRef.current) return
+    videoRef.current.pause()
+    videoRef.current.currentTime = 0
+  }, [item.type])
+
+  const open = useCallback(() => {
+    stopPreview()
+    onOpen(item)
+  }, [item, onOpen, stopPreview])
+
+  return (
+    <button
+      type="button"
+      onClick={open}
+      onMouseEnter={startPreview}
+      onMouseLeave={stopPreview}
+      onFocus={startPreview}
+      onBlur={stopPreview}
+      className="group mb-4 block w-full break-inside-avoid text-left"
+      aria-label={`Open shared ${item.type === 'video' ? 'film' : 'photograph'}`}
+    >
+      <figure className="overflow-hidden rounded-[var(--radius-md)] border border-white/10 bg-[#2b211e] p-2 transition-colors group-hover:border-[#d7b77e]/55 group-focus-visible:border-[#d7b77e]/55">
+        <div className={`relative overflow-hidden rounded-[0.35rem] bg-[#171210] ${aspectClass[item.orientation]}`}>
+          {item.type === 'video' ? (
+            <video
+              ref={videoRef}
+              src={item.src}
+              poster={item.poster}
+              muted
+              loop
+              playsInline
+              preload="metadata"
+              aria-label={item.alt}
+              className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.035] group-focus-visible:scale-[1.035]"
+            />
+          ) : (
+            <img
+              src={item.src}
+              alt={item.alt}
+              loading="lazy"
+              decoding="async"
+              className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.035] group-focus-visible:scale-[1.035]"
+            />
+          )}
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent" />
+          {item.type === 'video' && (
+            <span className="pointer-events-none absolute left-1/2 top-1/2 grid size-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white/35 bg-black/45 text-white backdrop-blur-sm transition-all group-hover:scale-105 group-hover:opacity-0 group-focus-visible:opacity-0">
+              <Play size={20} fill="currentColor" aria-hidden="true" />
+            </span>
+          )}
+          <span className="pointer-events-none absolute bottom-3 left-3 text-white/90">
+            {item.type === 'video' ? <Film size={16} aria-hidden="true" /> : <Images size={16} aria-hidden="true" />}
+          </span>
+        </div>
+      </figure>
+    </button>
+  )
 }
 
 export const StaticMediaArchive = () => {
@@ -57,34 +130,11 @@ export const StaticMediaArchive = () => {
         </div>
 
         <div className="columns-1 gap-4 sm:columns-2 lg:columns-3 xl:columns-4" aria-live="polite">
-          {visibleMedia.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setSelected(item)}
-              className="group mb-4 block w-full break-inside-avoid text-left"
-              aria-label={`Open ${item.label.toLowerCase()}`}
-            >
-              <figure className="overflow-hidden rounded-[var(--radius-md)] border border-white/10 bg-[#2b211e] p-2 transition-colors group-hover:border-[#d7b77e]/55">
-                <div className={`relative overflow-hidden rounded-[0.35rem] bg-[#171210] ${aspectClass[item.orientation]}`}>
-                  <img
-                    src={item.type === 'video' ? item.poster : item.src}
-                    alt={item.type === 'photo' ? item.alt : ''}
-                    loading="lazy"
-                    decoding="async"
-                    className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.035]"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-transparent to-transparent" />
-                  {item.type === 'video' && <span className="absolute left-1/2 top-1/2 grid size-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white/35 bg-black/45 text-white backdrop-blur-sm transition-transform group-hover:scale-105"><Play size={20} fill="currentColor" aria-hidden="true" /></span>}
-                  <span className="absolute bottom-3 left-3 inline-flex items-center gap-2 text-[0.65rem] font-bold uppercase tracking-[0.14em] text-white">{item.type === 'video' ? <Film size={14} aria-hidden="true" /> : <Images size={14} aria-hidden="true" />}{item.label}</span>
-                </div>
-              </figure>
-            </button>
-          ))}
+          {visibleMedia.map((item) => <ArchiveTile key={item.id} item={item} onOpen={setSelected} />)}
         </div>
       </div>
 
-      <Modal open={Boolean(selected)} onClose={() => setSelected(null)} title={selected?.label ?? 'Archive'} panelClassName="sm:max-w-6xl !bg-[#211916] !text-[#f8efe2]">
+      <Modal open={Boolean(selected)} onClose={() => setSelected(null)} title={selected?.type === 'video' ? 'Shared film' : 'Shared photograph'} panelClassName="sm:max-w-6xl !bg-[#211916] !text-[#f8efe2]">
         {selected && (
           <figure>
             <div className="grid min-h-56 max-h-[72dvh] place-items-center overflow-hidden rounded-lg bg-black/40">
@@ -101,4 +151,3 @@ export const StaticMediaArchive = () => {
     </section>
   )
 }
-

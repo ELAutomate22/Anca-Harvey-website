@@ -51,11 +51,53 @@ export const readJson = async (request: Request, maxBytes = 32_768): Promise<unk
     throw new ApiError(413, 'PAYLOAD_TOO_LARGE', 'The request body is too large.')
   }
 
+  const reader = request.body?.getReader()
+  if (!reader) throw new ApiError(400, 'INVALID_JSON', 'The request body is not valid JSON.')
+  const chunks: Uint8Array[] = []
+  let totalBytes = 0
+
   try {
-    return await request.json()
-  } catch {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      totalBytes += value.byteLength
+      if (totalBytes > maxBytes) {
+        await reader.cancel()
+        throw new ApiError(413, 'PAYLOAD_TOO_LARGE', 'The request body is too large.')
+      }
+      chunks.push(value)
+    }
+
+    const bytes = new Uint8Array(totalBytes)
+    let offset = 0
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset)
+      offset += chunk.byteLength
+    }
+    return JSON.parse(new TextDecoder().decode(bytes)) as unknown
+  } catch (error) {
+    if (error instanceof ApiError) throw error
     throw new ApiError(400, 'INVALID_JSON', 'The request body is not valid JSON.')
+  } finally {
+    reader.releaseLock()
   }
+}
+
+export const requireBoundedContentLength = (
+  request: Request,
+  maxBytes: number,
+  code: string,
+  message: string,
+): number => {
+  const header = request.headers.get('content-length')
+  if (!header || !/^\d+$/u.test(header)) {
+    throw new ApiError(411, 'CONTENT_LENGTH_REQUIRED', 'The upload size could not be verified. Please choose the file again.')
+  }
+  const length = Number(header)
+  if (!Number.isSafeInteger(length) || length < 1 || length > maxBytes) {
+    throw new ApiError(413, code, message)
+  }
+  return length
 }
 
 const csp = [

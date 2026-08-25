@@ -17,6 +17,9 @@ import { PhotoReveal } from '@/components/effects/PhotoReveal'
 import { useEffectTier } from '@/hooks/useEffectTier'
 import { useReducedMotionPreference } from '@/hooks/useReducedMotionPreference'
 import { staggerChild, staggerContainer } from '@/lib/motion'
+import { recapService } from '@/features/recap/recap-service'
+import type { RecapIndexResponse, ThisDayResponse } from '@/features/recap/types'
+import { formatDate } from '@/lib/date'
 
 const features = [
   { to: '/story', index: '01', title: 'Our Story', copy: 'The chapters, turning points, and ordinary days that became ours.', icon: Heart, className: 'md:col-span-7', image: '/assets/images/IMG-20260817-WA0013.jpg' },
@@ -71,6 +74,8 @@ const HomePage = () => {
   const [memory, setMemory] = useState<ApiMemory | null>(null)
   const [nextPlan, setNextPlan] = useState<PlannedActivity | null>(null)
   const [letterSummary, setLetterSummary] = useState<LetterSummary | null>(null)
+  const [recapIndex, setRecapIndex] = useState<RecapIndexResponse | null>(null)
+  const [thisDay, setThisDay] = useState<ThisDayResponse | null>(null)
   const relationship = auth.relationship
   const partner1Name = auth.profiles.find((profile) => profile.id === relationship?.partner1UserId)?.displayName ?? relationshipConfig.partner1Name
   const partner2Name = auth.profiles.find((profile) => profile.id === relationship?.partner2UserId)?.displayName ?? relationshipConfig.partner2Name
@@ -93,6 +98,19 @@ const HomePage = () => {
       }
     }
     void loadFeaturedMemory()
+  }, [])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    Promise.allSettled([
+      recapService.index(controller.signal),
+      recapService.thisDay(controller.signal),
+    ]).then(([recapResult, thisDayResult]) => {
+      if (controller.signal.aborted) return
+      setRecapIndex(recapResult.status === 'fulfilled' ? recapResult.value : null)
+      setThisDay(thisDayResult.status === 'fulfilled' && thisDayResult.value.items.length ? thisDayResult.value : null)
+    })
+    return () => controller.abort()
   }, [])
 
   useEffect(() => {
@@ -137,14 +155,14 @@ const HomePage = () => {
     <PageTransition>
       <section className="relative mx-auto grid min-h-[calc(100dvh-var(--nav-height))] max-w-[1600px] items-center gap-10 overflow-hidden px-5 py-14 sm:px-8 md:py-20 lg:grid-cols-[minmax(0,0.93fr)_minmax(30rem,1.07fr)] lg:px-12 xl:gap-20">
         <motion.div variants={staggerContainer} initial={reducedMotion ? false : 'hidden'} animate="visible" className="relative z-10 max-w-3xl lg:pb-16">
-          <motion.p variants={staggerChild} className="editorial-rule">{relationshipTitle} · Vol. I</motion.p>
+          <motion.p variants={staggerChild} className="editorial-rule">{recapIndex?.anniversary.isToday ? `${recapIndex.anniversary.completedYearNumber} ${recapIndex.anniversary.completedYearNumber === 1 ? 'year' : 'years'} today` : `${relationshipTitle} · Vol. I`}</motion.p>
           <motion.h1 variants={staggerChild} className="balance mt-7 font-display text-[clamp(4.4rem,10vw,10.5rem)] font-medium leading-[0.72] tracking-[-0.055em]">
             <span className="block">{partner1Name}</span>
             <span className="ml-[0.45em] block italic text-accent">&amp; {partner2Name}</span>
           </motion.h1>
-          <motion.p variants={staggerChild} className="mt-9 max-w-md text-lg leading-8 text-muted sm:text-xl">Our little corner of the world—made for the things we never want to lose.</motion.p>
+          <motion.p variants={staggerChild} className="mt-9 max-w-md text-lg leading-8 text-muted sm:text-xl">{recapIndex?.anniversary.isToday ? 'Your anniversary recap is ready—a real portrait of the chapter you just completed.' : 'Our little corner of the world—made for the things we never want to lose.'}</motion.p>
           <motion.div variants={staggerChild} className="mt-9 flex flex-wrap items-center gap-4">
-            <CinematicLink to="/story" variant="romantic">Begin our story <ArrowRight size={16} aria-hidden="true" /></CinematicLink>
+            <CinematicLink to={recapIndex?.anniversary.isToday ? `/recap/year/${recapIndex.anniversary.completedYearNumber}` : '/story'} variant="romantic">{recapIndex?.anniversary.isToday ? 'Open our anniversary' : 'Begin our story'} <ArrowRight size={16} aria-hidden="true" /></CinematicLink>
             <a href="#together" className="inline-flex min-h-12 items-center gap-2 px-3 text-xs font-bold uppercase tracking-[0.16em] text-muted transition-colors hover:text-accent">Together, in numbers <ArrowDownRight size={16} aria-hidden="true" /></a>
           </motion.div>
         </motion.div>
@@ -162,6 +180,15 @@ const HomePage = () => {
           <RelationshipCounter startDate={startDate} />
         </div>
       </Reveal>
+
+      {thisDay && (
+        <Reveal className="mx-auto max-w-[1500px] px-5 pb-20 sm:px-8 lg:px-12 lg:pb-28">
+          <div className="rounded-[var(--radius-lg)] border border-line bg-elevated p-7 sm:p-9 lg:p-12">
+            <div><p className="editorial-rule">This day in our relationship</p><h2 className="mt-4 font-display text-4xl font-medium sm:text-6xl">The archive remembers {formatDate(thisDay.date, { day: 'numeric', month: 'long' })}.</h2></div>
+            <div className="mt-9 grid gap-3 md:grid-cols-3">{thisDay.items.slice(0, 3).map((item, index) => <article key={`${item.kind}-${item.date}-${index}`} className="relative min-h-48 overflow-hidden rounded-[var(--radius-md)] border border-line bg-surface p-6">{item.media?.type === 'image' && <img src={item.media.url} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover opacity-20" />}<div className="relative flex h-full flex-col"><span className="text-xs font-bold uppercase tracking-[0.13em] text-accent">{formatDate(item.date)}</span><h3 className="mt-auto font-display text-3xl font-medium">{item.title}</h3></div></article>)}</div>
+          </div>
+        </Reveal>
+      )}
 
       {nextPlan && (
         <Reveal className="mx-auto max-w-[1500px] px-5 pb-20 sm:px-8 lg:px-12 lg:pb-28">
