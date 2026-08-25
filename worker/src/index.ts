@@ -90,6 +90,14 @@ import {
   uploadLetterMedia,
 } from './routes/letters'
 import {
+  backupEstimate,
+  backupHistory,
+  backupJob,
+  createBackup,
+  downloadBackup,
+  reauthenticateForBackup,
+} from './routes/backup'
+import {
   ApiError,
   apiFailure,
   apiSuccess,
@@ -132,6 +140,30 @@ const handleApi = async (request: Request, env: Env): Promise<Response> => {
     if (request.method === 'GET') return getRelationship(request, env)
     if (request.method === 'PATCH') return updateRelationship(request, env)
     return methodNotAllowed()
+  }
+
+  if (pathname === '/api/backup/estimate') {
+    return request.method === 'GET' ? backupEstimate(request, env) : methodNotAllowed()
+  }
+  if (pathname === '/api/backup/history') {
+    return request.method === 'GET' ? backupHistory(request, env) : methodNotAllowed()
+  }
+  if (pathname === '/api/backup/reauthenticate') {
+    return request.method === 'POST' ? reauthenticateForBackup(request, env) : methodNotAllowed()
+  }
+  if (pathname === '/api/backup/data') {
+    return request.method === 'POST' ? createBackup(request, env, 'data') : methodNotAllowed()
+  }
+  if (pathname === '/api/backup/full') {
+    return request.method === 'POST' ? createBackup(request, env, 'full') : methodNotAllowed()
+  }
+  const backupDownloadMatch = pathname.match(/^\/api\/backup\/jobs\/([^/]+)\/download$/u)
+  if (backupDownloadMatch?.[1]) {
+    return request.method === 'GET' ? downloadBackup(request, env, backupDownloadMatch[1]) : methodNotAllowed()
+  }
+  const backupJobMatch = pathname.match(/^\/api\/backup\/jobs\/([^/]+)$/u)
+  if (backupJobMatch?.[1]) {
+    return request.method === 'GET' ? backupJob(request, env, backupJobMatch[1]) : methodNotAllowed()
   }
 
   if (pathname === '/api/letters') {

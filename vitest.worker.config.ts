@@ -22,6 +22,7 @@ export default defineConfig(async () => {
     test: {
       include: ['worker/**/*.test.ts'],
       setupFiles: ['./worker/test/setup.ts'],
+      fileParallelism: false,
     },
   }
 })

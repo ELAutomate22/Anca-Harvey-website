@@ -52,6 +52,7 @@ afterEach(() => {
 
 beforeEach(async () => {
   await env.DB.batch([
+    env.DB.prepare('DELETE FROM backup_jobs'),
     env.DB.prepare('DELETE FROM idempotency_keys'),
     env.DB.prepare('DELETE FROM login_attempts'),
     env.DB.prepare('DELETE FROM sessions'),

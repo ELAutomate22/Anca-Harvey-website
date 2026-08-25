@@ -61,10 +61,27 @@ export const createSession = async (request: Request, env: Env, userId: string):
   const [ipHash, userAgentHash] = await Promise.all([hashText(ip), hashText(userAgent)])
 
   await env.DB.prepare(
-    'INSERT INTO sessions (token_hash, user_id, expires_at, created_at, last_seen_at, ip_hash, user_agent_hash) VALUES (?, ?, ?, ?, ?, ?, ?)',
-  ).bind(tokenHash, userId, expiresAt, now, now, ipHash, userAgentHash).run()
+    'INSERT INTO sessions (token_hash, user_id, expires_at, created_at, last_seen_at, recent_auth_at, ip_hash, user_agent_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+  ).bind(tokenHash, userId, expiresAt, now, now, now, ipHash, userAgentHash).run()
 
   return sessionCookie(token)
+}
+
+export const getRecentAuthenticationAt = async (env: Env, session: AuthSession): Promise<number> => {
+  const row = await env.DB.prepare(
+    'SELECT recent_auth_at FROM sessions WHERE token_hash = ? AND user_id = ? AND expires_at > ? LIMIT 1',
+  ).bind(session.tokenHash, session.user.id, Date.now()).first<{ recent_auth_at: number }>()
+  return Number(row?.recent_auth_at ?? 0)
+}
+
+export const markSessionRecentlyAuthenticated = async (env: Env, session: AuthSession, now: number): Promise<void> => {
+  const result = await env.DB.prepare(`
+    UPDATE sessions SET recent_auth_at = ?, last_seen_at = ?
+    WHERE token_hash = ? AND user_id = ? AND expires_at > ?
+  `).bind(now, now, session.tokenHash, session.user.id, now).run()
+  if (Number(result.meta.changes ?? 0) !== 1) {
+    throw new ApiError(401, 'AUTH_REQUIRED', 'Please sign in to continue.')
+  }
 }
 
 export const getSession = async (request: Request, env: Env): Promise<AuthSession | null> => {

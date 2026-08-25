@@ -1,11 +1,12 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { CalendarDays, Check, Download, HardDriveDownload, LoaderCircle, LockKeyhole, ShieldCheck, Users } from 'lucide-react'
+import { CalendarDays, Check, LoaderCircle, LockKeyhole, ShieldCheck, Users } from 'lucide-react'
 import { relationshipConfig } from '@/config/relationship'
 import { useAuth } from '@/features/auth/auth-context'
 import { apiRequest, type ApiRelationship, type ApiUser } from '@/lib/api'
 import { formatDate } from '@/lib/date'
 import { CinematicButton } from '@/components/ui/Button'
 import { PageHeader, PageTransition } from '@/components/ui/Page'
+import DataBackupPanel from '@/features/backup/DataBackupPanel'
 
 const tabs = ['Account', 'Relationship', 'Appearance', 'About', 'Data & Backup'] as const
 type Tab = (typeof tabs)[number]
@@ -64,8 +65,6 @@ const SettingsPage = () => {
     }
   }
 
-  const demoExport = (kind: string) => setMessage(`${kind} remains scheduled for a later phase. No file was created, and static website assets will never be included.`)
-
   return (
     <PageTransition>
       <PageHeader eyebrow="Private by design" title="Settings" intro="Manage the two private profiles and the single relationship record that powers names, counters, and milestones across the archive." />
@@ -81,7 +80,7 @@ const SettingsPage = () => {
 
           {tab === 'About' && <div><p className="editorial-rule">About & Credits</p><h2 className="mt-5 font-display text-5xl font-medium">Made for one relationship.</h2><p className="mt-6 max-w-2xl text-muted">Our Corner combines your private shared archive with a live film catalogue supplied by The Movie Database.</p><div className="mt-10 max-w-2xl rounded-lg border border-line bg-surface p-6 sm:p-8"><a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer" aria-label="Visit The Movie Database"><img src="/assets/tmdb-logo.svg" alt="TMDB" className="h-16 w-16" /></a><p className="mt-6 font-semibold">This product uses the TMDB API but is not endorsed or certified by TMDB.</p><p className="mt-3 text-sm text-muted">Film metadata and catalogue artwork are requested through the private server connection. Your watchlist, diary, ratings, and relationship data remain in your own Cloudflare data store.</p></div></div>}
 
-          {tab === 'Data & Backup' && <div><p className="editorial-rule">Data & Backup</p><h2 className="mt-5 font-display text-5xl font-medium">Your history should stay yours.</h2><p className="mt-6 max-w-2xl text-muted">Backups remain intentionally deferred. Future exports will include relationship data and eligible user-uploaded media, never developer-provided static site assets.</p><div className="mt-10 grid gap-5 sm:grid-cols-2"><div className="rounded-lg border border-line p-6"><HardDriveDownload size={23} className="text-accent" /><h3 className="mt-5 font-display text-3xl">Download Full Backup</h3><p className="mt-3 text-sm text-muted">Data plus eligible user-uploaded photos and videos.</p><CinematicButton onClick={() => demoExport('Full backup')} variant="secondary" className="mt-6 w-full"><Download size={16} /> Later phase</CinematicButton></div><div className="rounded-lg border border-line p-6"><Download size={23} className="text-accent" /><h3 className="mt-5 font-display text-3xl">Export Data Only</h3><p className="mt-3 text-sm text-muted">Portable structured data without uploaded media.</p><CinematicButton onClick={() => demoExport('Data export')} variant="secondary" className="mt-6 w-full"><Download size={16} /> Later phase</CinematicButton></div></div><div className="mt-6 flex items-center justify-between border-y border-line py-5 text-sm"><span className="font-bold">Last backup</span><span className="text-muted">No backups yet</span></div></div>}
+          {tab === 'Data & Backup' && <DataBackupPanel />}
 
           <p role="status" aria-live="polite" className="mt-7 min-h-6 text-sm font-semibold text-accent">{message}</p>
         </div>

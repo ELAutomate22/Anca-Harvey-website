@@ -1,6 +1,6 @@
 # Our Corner
 
-Our Corner is a private, two-person relationship archive. Phase 5 keeps the editorial React experience and established security model, with shared Memories, Story, Movie Night, Game Night, Soundtrack, activities, a bucket list, and a genuinely server-time-locked Letters to the Future archive.
+Our Corner is a private, two-person relationship archive. Phase 7 keeps the editorial React experience and established security model, with shared Memories, Story, Movie Night, Game Night, Soundtrack, activities, a bucket list, server-time-locked Letters to the Future, and a secure portable backup system.
 
 ## Architecture
 
@@ -17,11 +17,11 @@ structured app data           authenticated user uploads only
 ```
 
 - The Worker entry point is `worker/src/index.ts`; routes and security helpers are split under `worker/src/`.
-- D1 holds exactly two users, one relationship, hashed sessions, login-attempt state, Memories metadata, media metadata, timeline entries, movie watchlist/history/ratings, games/history, songs, activities/plans/history, bucket-list items, future letters/page metadata, and idempotency records.
+- D1 holds exactly two users, one relationship, hashed sessions, login-attempt state, Memories metadata, media metadata, timeline entries, movie watchlist/history/ratings, games/history, songs, activities/plans/history, bucket-list items, future letters/page metadata, idempotency records, and lightweight backup job/history metadata.
 - R2 holds only photos, videos, and future-letter scans uploaded by an authenticated partner. The bucket must remain private; browsers receive media only through Worker routes after server-side authorization.
-- Developer-provided imagery, fonts, textures, and decorative media remain in `public/` or `src/assets/`. They are deployed as ordinary site assets, never copied to D1/R2, and are outside future relationship backups.
+- Developer-provided imagery, fonts, textures, and decorative media remain in `public/` or `src/assets/`. They are deployed as ordinary site assets, never copied to D1/R2, and are outside every relationship backup.
 
-There is no public registration, setup endpoint, password-reset flow, Supabase, Firebase, or browser-stored auth token. Anniversary Wrapped, full backup/export, and advanced Phase 6 visual effects remain intentionally deferred.
+There is no public registration, setup endpoint, password-reset flow, Supabase, Firebase, or browser-stored auth token. Anniversary Wrapped and restore/import remain intentionally deferred.
 
 TMDB is called only by the authenticated Worker. The application Read Access Token is a Worker secret named `TMDB_API_READ_TOKEN`; it is never a `VITE_*` variable, frontend value, committed config value, or API response. TMDB catalogue data stays authoritative, while D1 stores only relationship-owned selections and small movie snapshots.
 
@@ -38,6 +38,9 @@ TMDB is called only by the authenticated Worker. The application Read Access Tok
 - CSP, clickjacking, MIME-sniffing, referrer, permissions, and private-cache headers are set by the Worker.
 - Future-letter readiness and opening are derived from Worker time and the sealed D1 `unlock_at`; browser time, request payloads, query parameters, and frontend state cannot authorize an open.
 - Future-letter drafts are creator-private. Sealed and ready responses use a safe metadata serializer that cannot include typed bodies, media IDs/URLs, Base64 content, or R2 keys. Private page delivery repeats the letter-state authorization on every request.
+- User backups use explicit relationship-scoped D1 queries; authentication tables, session rows, password hashes, logs, secrets, raw SQL dumps, and browser-supplied relationship IDs never enter the archive.
+- Full Backup requires a recent password confirmation when the current session authentication is older than ten minutes. The password is verified by the existing scrypt login system and is not retained.
+- Direct download authorization is short-lived and requester-bound. ZIP responses use `private, no-store`, `nosniff`, attachment disposition, SameSite session cookies, and same-site download checks.
 
 ## Local setup
 
@@ -98,10 +101,11 @@ Migrations in `migrations/` are the complete reproducible schema. Do not create 
 - `bucket_list_items`: shared dreams, categories, priorities, target dates, Dreaming/Planning/Booked/Completed states, completion details, attribution, and optional Memory links.
 - `future_letters`: creator, real-profile recipient semantics, plain-text typed content, teaser, immutable sealed UTC unlock instant, opened timestamp, and first opener. The only stored states are `draft → sealed → opened`; `ready` is derived.
 - `future_letter_media`: server-only private R2 keys and image metadata for ordered handwritten pages or a typed-letter cover. A trigger backs up the application-level 12-page limit during concurrent uploads.
+- `backup_jobs`: requester/type/status attribution, snapshot and completion times, counts, sizes, short download authorization expiry, and safe error codes. It never stores archive content, passwords, Letter bodies, URLs, or R2 keys.
 
 Foreign keys and focused indexes cover membership, session expiry, relationship/date pagination, favourites, media ordering, timeline ordering, and idempotency cleanup.
 
-Phase 5 is additive: `0005_future_letters.sql` creates the letter/media schema and focused indexes, while `0006_future_letter_media_limits.sql` adds the concurrent-safe page-limit trigger. Previously applied migrations are unchanged.
+Phase 7 remains additive: `0008_backup_jobs.sql` adds `sessions.recent_auth_at`, the backup job/history table, focused history/expiry indexes, and a partial unique index enforcing one active Full Backup per relationship. Previously applied migrations are unchanged.
 
 ## Memories and media
 
@@ -128,7 +132,24 @@ The browser countdown is visual only and is anchored to the last Worker `serverN
 
 Locked list/detail responses do not place content in the browser response. Draft content is returned only to its creator, and opened content is fetched on demand rather than included in the grid. A guessed `/api/letters/:letterId/pages/:mediaId` request repeats authentication, relationship, draft ownership, and opened-state checks before reading R2; locked pages use `private, no-store` and cannot be obtained at the ready-but-unopened stage.
 
-Application-level encryption at rest is deliberately not introduced in Phase 5 because it would add key-loss and recovery risk. The mandatory protection boundary is private D1/R2 behind the authenticated Worker and its server-authoritative lock. Future backup/export code must use the safe letter serializer: draft or sealed content and page access are never exportable, while opened content may become eligible in a later phase.
+Application-level encryption at rest is deliberately not introduced because it would add key-loss and recovery risk. The mandatory protection boundary is private D1/R2 behind the authenticated Worker and its server-authoritative lock. The Phase 7 export query enforces this boundary before serialization: locked and ready-but-unopened content is never selected, opened content is eligible, and requester drafts require a separate explicit option.
+
+## Data & Backup
+
+Settings → Data & Backup provides two real downloads:
+
+- **Export Data Only** creates a small ZIP with the versioned manifest, README, canonical JSON, and supplementary UTF-8 CSV. It includes safe media metadata but no photo/video/page binaries.
+- **Download Full Backup** creates the same portable records plus every eligible original user-uploaded Memory image/video and opened handwritten Letter page. If requested, it may also include only the signed-in user’s own draft content/media.
+
+Both use backup format `1.0`, documented in [`docs/backup-format-v1.md`](docs/backup-format-v1.md). Stable entity/media IDs and links are preserved for a future separately designed restore phase. Passwords, password hashes, sessions, cookies, login-attempt data, API/Cloudflare secrets, private URLs, R2 keys, source code, raw D1 dumps, TMDB poster binaries, and developer-provided static assets are structurally excluded.
+
+The Worker chooses direct streaming because the current project already has authenticated D1/R2 bindings but no configured Workflow or temporary backup bucket. `client-zip` consumes a lazy async iterable, emits standard STORE entries with ZIP64 support, and returns a Web `ReadableStream`. Each R2 body is fetched from the D1-declared media plan and streamed sequentially; the Worker never lists the bucket, scans the deployed site, buffers a whole media object/archive, or launches all media reads concurrently. Missing referenced objects produce a safe manifest warning while the remaining archive completes.
+
+A POST creates a requester-bound D1 job with a 15-minute window to start the one-shot direct download. Full Backup checks recent authentication and only one active Full Backup is permitted per relationship. The download endpoint creates a single D1 transaction-backed metadata snapshot, freezes Letter eligibility at that instant, then streams. The job becomes successful only after the ZIP stream closes; interrupted streams become failed and require a fresh request. Because no staged archive exists, there is no duplicate archive object, presigned URL, lifecycle rule, or cleanup binding.
+
+The size card sums eligible D1 `size_bytes` metadata and never reads R2 merely to estimate size. Backup history stores only requester, type, state, safe counts/sizes/errors, and timing. Generated ZIPs are not retained. The archive is not encrypted; obsolete ZipCrypto is deliberately avoided, and the UI reminds the user to store the authenticated HTTPS download somewhere trusted.
+
+Restore/import, ZIP upload, merge, and database replacement are not implemented.
 
 ## API
 
@@ -177,6 +198,12 @@ All API responses use `{ success: true, data }` or `{ success: false, error: { c
 | `PATCH/DELETE` | `/api/bucket-list/:id` | edit, move, reopen, or delete a dream |
 | `POST` | `/api/bucket-list/:id/complete` | record completion and optionally create one linked Memory |
 | `GET` | `/api/bucket-list/random`, `/stats` | choose an unfinished dream and report real progress |
+| `GET` | `/api/backup/estimate` | D1-only eligible media/file/Memory estimate and recent-auth state |
+| `POST` | `/api/backup/reauthenticate` | verify the current password and refresh this session’s short recent-auth window |
+| `POST` | `/api/backup/data`, `/api/backup/full` | create a requester-bound Data Only or Full Backup job |
+| `GET` | `/api/backup/history` | shared safe job history and last-successful record |
+| `GET` | `/api/backup/jobs/:id` | relationship-authorized status without internal keys/errors |
+| `GET` | `/api/backup/jobs/:id/download` | requester-bound, one-shot, private streaming ZIP download |
 | `GET/POST` | `/api/letters` | safe visible-envelope list and private draft creation |
 | `GET` | `/api/letters/summary`, `/quick-dates` | content-free metrics and relationship-derived date suggestions |
 | `GET/PATCH/DELETE` | `/api/letters/:id` | state-aware detail, creator-only draft edit, or strongly confirmed creator deletion |
@@ -190,7 +217,7 @@ All protected frontend routes redirect unauthenticated users to the cinematic lo
 
 ## Production Cloudflare setup
 
-The production D1 database, private R2 bucket, two users, relationship, origins, and TMDB secret already exist for the current site. Do not recreate or reprovision them for Phase 5; the creation steps below are retained only for a completely new environment. A Phase 5 release applies migrations in order, deploys the Worker, builds the frontend, then deploys the static `dist` directory through its selected host.
+The production D1 database, private R2 bucket, two users, relationship, origins, and TMDB secret already exist for the current site. Do not recreate or reprovision them for Phase 7; the creation steps below are retained only for a completely new environment. A Phase 7 release applies migrations in order, deploys the Worker, builds the frontend, then deploys the static `dist` directory through its selected host.
 
 1. Authenticate Wrangler:
 
@@ -253,7 +280,7 @@ The production D1 database, private R2 bucket, two users, relationship, origins,
 
 No runtime `SESSION_SECRET` is needed by the chosen server-side session design: session tokens are cryptographically random and only their hashes are stored. The provisioning values are one-time process environment inputs, not Worker bindings and never `VITE_*` variables. `TMDB_API_READ_TOKEN` remains the only catalogue runtime secret and belongs in Wrangler secrets (or local `.dev.vars`), never in Vite or source control.
 
-Phase 5 adds no environment variable or secret. Existing `DB` and private `MEDIA` bindings are reused. For the current production environment, the only required release commands are `pnpm db:migrate:remote`, the normal Worker deploy/build flow, and the chosen frontend-host deployment; do not rerun account provisioning.
+Phase 7 adds no environment variable, secret, Workflow, Queue, scheduled trigger, lifecycle rule, bucket, or binding. Existing `DB` and private `MEDIA` bindings are reused. For the current production environment, run `pnpm db:migrate:remote` before the normal Worker/frontend release so migration `0008_backup_jobs.sql` is applied. Do not rerun account provisioning. No deployment command is run as part of this Phase 7 implementation handoff.
 
 ## Troubleshooting
 
@@ -270,6 +297,10 @@ Phase 5 adds no environment variable or secret. Existing `DB` and private `MEDIA
 - `LETTER_LOCKED`: the Worker has not reached the sealed UTC unlock instant. Device-clock changes are intentionally ignored.
 - `INVALID_LOCAL_TIME`: choose a valid clock time in the relationship timezone; DST spring-forward gaps do not exist.
 - letter page upload `409`: keep handwritten letters to 12 pages, retry a failed page, or remove another page before adding it.
+- `RECENT_AUTH_REQUIRED`: confirm the current password in the Full Backup dialog; existing long-lived sessions intentionally have no recent-auth timestamp until this succeeds.
+- backup download `410`: the 15-minute direct-download start window expired; create a fresh backup request.
+- backup completes with warnings: inspect `manifest.json` and `warnings/missing-media.json`; a D1-indexed R2 object was missing/unavailable, while original relationship records were unchanged.
+- interrupted backup: direct archives are not staged or retained, so create a fresh request and keep the Settings page/browser download open until streaming completes.
 
 ## Frontend routes
 
